@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CharacterClass" load_steps=2 format=3 uid="uid://bqkmdeoltk2e1"]
+
+[ext_resource type="Script" uid="uid://vbls7s42ixmg" path="res://scripts/character_class.gd" id="1_8ougj"]
+
+[resource]
+script = ExtResource("1_8ougj")
+class_name_str = "Bulwark"
+max_health = 200.0
+move_speed = 3.0
+gun_damage = 15.0
+fire_rate = 0.08
+gun_range = 50.0
+ability_1_type = 4
+ability_1_cooldown = 12.0
+ability_2_type = 5
+ability_2_cooldown = 15.0
+ability_3_type = 6
+ability_3_cooldown = 12.0
+metadata/_custom_type_script = "uid://vbls7s42ixmg"

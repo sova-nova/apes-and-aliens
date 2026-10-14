@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterClass" load_steps=2 format=3 uid="uid://bbg47ysaxns68"]
+
+[ext_resource type="Script" uid="uid://vbls7s42ixmg" path="res://scripts/character_class.gd" id="1_c2d3r"]
+
+[resource]
+script = ExtResource("1_c2d3r")
+class_name_str = "Ghost"
+max_health = 75.0
+move_speed = 6.0
+gun_damage = 80.0
+fire_rate = 1.0
+gun_range = 200.0
+ability_1_type = 7
+ability_2_type = 8
+ability_2_cooldown = 11.0
+ability_3_type = 9
+ability_3_cooldown = 12.0
+metadata/_custom_type_script = "uid://vbls7s42ixmg"

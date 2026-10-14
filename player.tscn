@@ -1,0 +1,54 @@
+[gd_scene load_steps=9 format=3 uid="uid://mqppgwtxw1e7"]
+
+[ext_resource type="Script" uid="uid://bypr7bk0ay1fu" path="res://scripts/player.gd" id="1_4flbx"]
+[ext_resource type="Script" uid="uid://vbls7s42ixmg" path="res://scripts/character_class.gd" id="2_onrkg"]
+[ext_resource type="Resource" uid="uid://cu8g84si2v42l" path="res://classes/breacher.tres" id="2_sweqy"]
+[ext_resource type="Resource" uid="uid://bqkmdeoltk2e1" path="res://classes/bulwark.tres" id="4_2hs0m"]
+[ext_resource type="Resource" uid="uid://bbg47ysaxns68" path="res://classes/ghost.tres" id="5_1jxqw"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_onrkg"]
+radius = 0.3
+height = 1.5
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_i3pqv"]
+radius = 0.3
+height = 1.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_4flbx"]
+size = Vector3(0.1, 0.1, 0.5)
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_4flbx")
+character_class = ExtResource("5_1jxqw")
+available_classes = Array[ExtResource("2_onrkg")]([ExtResource("2_sweqy"), ExtResource("4_2hs0m"), ExtResource("5_1jxqw")])
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_onrkg")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_i3pqv")
+
+[node name="CameraPivot" type="Node3D" parent="."]
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0279187, 0.4215834, 0)
+spring_length = 2.0
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot/SpringArm3D"]
+current = true
+
+[node name="AimRay" type="RayCast3D" parent="CameraPivot/SpringArm3D/Camera3D"]
+target_position = Vector3(0, 0, -100)
+
+[node name="GunModel" type="MeshInstance3D" parent="CameraPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, -0.016532853, -0.3509426)
+mesh = SubResource("BoxMesh_4flbx")
+skeleton = NodePath("")
+
+[node name="Muzzle" type="Marker3D" parent="CameraPivot/GunModel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.25154698)
+
+[node name="MuzzleFlash" type="OmniLight3D" parent="CameraPivot/GunModel/Muzzle"]
+light_color = Color(1, 0.9058309, 0.58383155, 1)
+light_energy = 0.0
+omni_range = 3.0

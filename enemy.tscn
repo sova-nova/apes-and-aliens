@@ -1,0 +1,35 @@
+[gd_scene load_steps=6 format=3 uid="uid://coumjeir5oon0"]
+
+[ext_resource type="Script" uid="uid://cu1i6ey0tqe1b" path="res://scripts/enemy.gd" id="1_7k104"]
+[ext_resource type="Script" uid="uid://xq2mu6hob3et" path="res://scripts/health_component.gd" id="2_4gyqm"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_qi2p4"]
+radius = 0.3
+height = 1.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4gyqm"]
+albedo_color = Color(0.8966418, 0.15095866, 0.25077048, 1)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_iifgy"]
+material = SubResource("StandardMaterial3D_4gyqm")
+radius = 0.3
+height = 1.5
+
+[node name="Enemy" type="CharacterBody3D"]
+script = ExtResource("1_7k104")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_qi2p4")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_iifgy")
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("2_4gyqm")
+metadata/_custom_type_script = "uid://xq2mu6hob3et"
+
+[node name="NavAgent" type="NavigationAgent3D" parent="."]
+path_desired_distance = 0.5
+path_height_offset = 0.75
+path_search_max_distance = 100.0
+debug_enabled = true
