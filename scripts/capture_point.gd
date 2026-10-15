@@ -4,6 +4,7 @@ extends Area3D
 @export var capture_speed: float = 20.0
 @export var score_tick_time: float = 1.0
 @export var point_order: int = 0 # 0 for A, 1 for B, 2 for C
+
 var is_active: bool = false
 signal point_captured(team: int)
 
@@ -14,6 +15,7 @@ var is_contested: bool = false
 
 @onready var status_label: Label3D = $StatusLabel
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
+@onready var collision_shape: CollisionShape3D = $CollisionShape3D
 
 func _ready():
 	update_visuals()
@@ -129,3 +131,29 @@ func update_visuals():
 		
 	mat.roughness = 0.8
 	mesh_instance.material_override = mat
+	
+func get_random_point_inside() -> Vector3:
+	# If we don't have a collision shape, just return the center
+	if not collision_shape or not collision_shape.shape:
+		return global_position
+		
+	var shape = collision_shape.shape
+	
+	# Check if it's a Cylinder (which we used for the capture point)
+	if shape is CylinderShape3D:
+		var radius = shape.radius
+		# Pick a random angle (0 to 360 degrees / 0 to TAU radians)
+		var angle = randf() * TAU
+		# Pick a random distance from the center. 
+		# We use sqrt(randf()) to ensure they spread out evenly across the circle, 
+		# instead of clumping heavily in the very middle.
+		var distance = sqrt(randf()) * radius
+		
+		# Calculate the X and Z offset
+		var offset_x = cos(angle) * distance
+		var offset_z = sin(angle) * distance
+		
+		return global_position + Vector3(offset_x, 0, offset_z)
+		
+	# Fallback if the shape isn't a cylinder
+	return global_position

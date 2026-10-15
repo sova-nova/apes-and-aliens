@@ -17,8 +17,15 @@ var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var speed: float = 5.0
 var max_health: float = 100.0
 var current_health: float
+var is_alive: bool = true
+
 var _can_shoot: bool = true
 var _shoot_cooldown: float = 0.0
+var current_ammo: int = 30
+var max_ammo: int = 30
+var is_reloading: bool = false
+var reload_timer: float = 0.0
+
 var _heal_cooldown_timer: float = 0.0
 var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0]
 var _is_overcharged: bool = false
@@ -81,6 +88,9 @@ func apply_class():
 	max_health = character_class.max_health
 	current_health = max_health # Refill health on class swap
 	_is_overcharged = false
+	current_ammo = character_class.mag_size
+	max_ammo = character_class.mag_size
+	is_reloading = false
 	
 	# Apply Weapon Stats
 	if aim_ray:
@@ -114,6 +124,15 @@ func _apply_screen_shake(amount: float = 0.05):
 	tween.parallel().tween_property(camera_3d, "v_offset", 0.0, 0.05)
 
 func _physics_process(delta: float):
+	# --- MATCH COUNTDOWN GATE ---
+	# If the match hasn't started yet, don't allow movement or shooting!
+	if not GameManager.is_match_playing:
+		# Still apply gravity so we stay on the floor
+		if not is_on_floor():
+			velocity.y -= gravity * delta
+		move_and_slide()
+		return # Stop right here, don't process movement or shooting!
+	
 	# --- Shoot cooldown ---
 	if not _can_shoot:
 		_shoot_cooldown -= delta
@@ -125,6 +144,20 @@ func _physics_process(delta: float):
 		and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
 		and _can_shoot:
 		shoot()
+		
+	# --- Reload Logic ---
+	if is_reloading:
+		reload_timer -= delta
+		if reload_timer <= 0.0:
+			is_reloading = false
+			current_ammo = max_ammo
+	
+	# Update HUD Ammo
+	HUD.update_ammo(current_ammo, max_ammo, is_reloading)
+			
+	if Input.is_action_just_pressed("reload") and not is_reloading and current_ammo < max_ammo:
+		is_reloading = true
+		reload_timer = character_class.reload_time
 
 	# --- Gravity ---
 	if not is_on_floor():
@@ -263,6 +296,15 @@ func shoot():
 	# 1. Calculate base modified stats
 	var current_fire_rate = character_class.fire_rate
 	var current_gun_damage = character_class.gun_damage
+	
+	if current_ammo <= 0 or is_reloading:
+		# Auto-reload if empty
+		if not is_reloading:
+			is_reloading = true
+			reload_timer = character_class.reload_time
+		return
+		
+	current_ammo -= 1
 	
 	if _is_overcharged:
 		current_fire_rate *= 0.5 # Halved cooldown = Double fire rate!
@@ -618,16 +660,24 @@ func _bulwark_ability():
 	)
 
 func _shockwave():
-	# Push all enemies within 5 meters away
-	var enemies = get_tree().get_nodes_in_group("bots")
-	for enemy in enemies:
-		if not is_instance_valid(enemy): continue
-		var dist = global_position.distance_to(enemy.global_position)
+	# Get everyone on the battlefield
+	var targets = []
+	targets.append_array(get_tree().get_nodes_in_group("bots"))
+	targets.append_array(get_tree().get_nodes_in_group("players"))
+	
+	for target in targets:
+		if not is_instance_valid(target): continue
+		if target == self: continue # Don't push yourself!
+		
+		# CRITICAL: Only push enemies, not allies!
+		if "faction" in target and target.faction == self.faction:
+			continue
+			
+		var dist = global_position.distance_to(target.global_position)
 		if dist < 5.0:
-			var push_dir = (enemy.global_position - global_position).normalized()
-			# Give them a strong push upwards and outwards
-			if enemy.has_method("apply_knockback"):
-				enemy.apply_knockback(push_dir * 15.0 + Vector3.UP * 5.0)
+			var push_dir = (target.global_position - global_position).normalized()
+			if target.has_method("apply_knockback"):
+				target.apply_knockback(push_dir * 15.0 + Vector3.UP * 5.0)
 				
 	# Visual: Expanding ring
 	var ring = MeshInstance3D.new()
@@ -758,12 +808,16 @@ func _end_siphon():
 # ─── Damageable ─────────────────────────────────────────────
 
 func _handle_death():
+	is_alive = false
+	$CollisionShape3D.disabled = true # Make us physically invisible to raycasts
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 	await get_tree().create_timer(3.0).timeout
 	_respawn()
 
 func _respawn():
+	is_alive = true
+	$CollisionShape3D.disabled = false # Re-enable our physical body
 	current_health = max_health
 	visible = true
 	process_mode = Node.PROCESS_MODE_INHERIT

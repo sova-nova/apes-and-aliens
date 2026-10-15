@@ -30,16 +30,29 @@ layout_mode = 2
 size_flags_horizontal = 4
 text = "SELECT YOUR CLASS"
 
+[node name="FactionHBox" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="ApesButton" type="Button" parent="VBoxContainer/FactionHBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Primal Apes"
+
+[node name="AliensButton" type="Button" parent="VBoxContainer/FactionHBox"]
+layout_mode = 2
+text = "Chrome Legion"
+
 [node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
 layout_mode = 2
+size_flags_horizontal = 4
 
 [node name="BreacherButton" type="Button" parent="VBoxContainer/HBoxContainer"]
 layout_mode = 2
 text = "Breacher"
 
-[node name="BulwarkButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+[node name="WardenButton" type="Button" parent="VBoxContainer/HBoxContainer"]
 layout_mode = 2
-text = "Bulwark"
+text = "Warden"
 
 [node name="GhostButton" type="Button" parent="VBoxContainer/HBoxContainer"]
 layout_mode = 2
@@ -49,7 +62,9 @@ text = "Ghost"
 layout_mode = 2
 text = "DEPLOY"
 
+[connection signal="pressed" from="VBoxContainer/FactionHBox/ApesButton" to="." method="_on_apes_button_pressed"]
+[connection signal="pressed" from="VBoxContainer/FactionHBox/AliensButton" to="." method="_on_aliens_button_pressed"]
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/BreacherButton" to="." method="_on_breacher_pressed"]
-[connection signal="pressed" from="VBoxContainer/HBoxContainer/BulwarkButton" to="." method="_on_warden_pressed"]
+[connection signal="pressed" from="VBoxContainer/HBoxContainer/WardenButton" to="." method="_on_warden_pressed"]
 [connection signal="pressed" from="VBoxContainer/HBoxContainer/GhostButton" to="." method="_on_ghost_pressed"]
 [connection signal="pressed" from="VBoxContainer/DeployButton" to="." method="_on_deploy_pressed"]

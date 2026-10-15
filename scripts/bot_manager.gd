@@ -6,7 +6,7 @@ extends Node
 # Automatically load the classes from your filesystem, no Inspector setup needed!
 var bot_classes: Array[CharacterClass] = [
 	preload("res://classes/breacher.tres"), # Replace with your actual filenames!
-	preload("res://classes/bulwark.tres"),
+	preload("res://classes/warden.tres"),
 	preload("res://classes/ghost.tres")
 ]
 
@@ -34,29 +34,29 @@ func _try_spawn_team(team: int):
 
 func _spawn_bot(team: int):
 	if not enemy_scene:
-		print("Bot Manager: Enemy scene is missing!")
+		print("Bot Manager: Bot scene is missing!")
 		return
 		
-	# Find a spawn point
 	var spawn_group = "team_alpha_spawns" if team == 0 else "team_bravo_spawns"
 	var spawns = get_tree().get_nodes_in_group(spawn_group)
 	
 	if spawns.size() == 0:
-		return # No spawn points placed in the map
+		return 
 		
 	var spawn_point = spawns.pick_random()
 	
-	# Instance the enemy
 	var new_bot = enemy_scene.instantiate()
 	new_bot.faction = team
+	new_bot.add_to_group("bots")
 	
 	# Assign a random class to the bot
 	if bot_classes.size() > 0:
 		new_bot.character_class = bot_classes.pick_random()
-	
-	new_bot.add_to_group("bots") # Ensure they are in the bots group
-	# If you want bots to heal each other later, you can add them to a "combatants" group too
-	
-	# Add it to the current scene (the level)
+		
+	# Position the bot randomly inside the spawn area
+	if spawn_point.has_method("get_random_point_inside"):
+		new_bot.global_position = spawn_point.get_random_point_inside()
+	else:
+		new_bot.global_position = spawn_point.global_position
+		
 	get_tree().current_scene.add_child(new_bot)
-	new_bot.global_position = spawn_point.global_position

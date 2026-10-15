@@ -1,13 +1,16 @@
 extends Control
 
-@onready var health_bar: ProgressBar = $MarginContainer/HBoxContainer/ProgressBar
-@onready var health_label: Label = $MarginContainer/HBoxContainer/Label
+@onready var health_bar: ProgressBar = $MarginContainer/HBoxContainer/HealthBar
+@onready var health_label: Label = $MarginContainer/HBoxContainer/HealthLabel
 @onready var crosshair: Label = $CenterContainer/Crosshair
 @onready var alpha_score_label: Label = $HBoxContainer/AlphaScore
 @onready var bravo_score_label: Label = $HBoxContainer/BravoScore
 @onready var ability_label: Label = $MarginContainer2/AbilityLabel
 @onready var objective_label: Label = $ObjectiveLabel
-@onready var class_label: Label = $ClassLabel # We will create this next
+@onready var class_label: Label = $ClassLabel
+@onready var timer_label: Label = $VBoxContainer/TimerLabel
+@onready var countdown_label: Label = $CountdownLabel
+@onready var ammo_label: Label = $AmmoLabel
 
 var _player: CharacterBody3D = null
 var _hit_tween: Tween = null
@@ -16,6 +19,8 @@ func _ready():
 	if GameManager:
 		GameManager.score_updated.connect(_on_score_updated)
 		GameManager.objective_updated.connect(_on_objective_updated)
+		GameManager.match_timer_updated.connect(_on_match_timer_updated)
+		GameManager.match_state_changed.connect(_on_match_state_changed)
 
 func _process(_delta: float):
 	if not _player:
@@ -29,6 +34,38 @@ func _process(_delta: float):
 			if _player.character_class:
 				_on_class_changed(_player.character_class.class_name_str)
 				_on_health_changed(_player.current_health, _player.max_health)
+				
+func _on_match_timer_updated(time_left: float):
+	if not timer_label: return
+	var minutes = int(time_left) / 60
+	var seconds = int(time_left) % 60
+	var time_str = "%d:%02d" % [minutes, seconds]
+	
+	if GameManager.is_overtime:
+		timer_label.text = "OVERTIME"
+		timer_label.add_theme_color_override("font_color", Color.RED)
+	else:
+		timer_label.text = time_str
+		if time_left < 30.0:
+			timer_label.add_theme_color_override("font_color", Color.RED) # Urgency!
+		else:
+			timer_label.add_theme_color_override("font_color", Color.WHITE)
+
+func _on_match_state_changed(new_state: String):
+	if not countdown_label: return
+	
+	if new_state == "PLAYING":
+		countdown_label.visible = false
+	else:
+		countdown_label.visible = true
+		countdown_label.text = new_state
+		
+		if new_state == "GO!":
+			countdown_label.add_theme_color_override("font_color", Color.GREEN)
+		elif new_state == "OVERTIME":
+			countdown_label.add_theme_color_override("font_color", Color.RED)
+		else:
+			countdown_label.add_theme_color_override("font_color", Color.WHITE)
 
 func show_hit_marker():
 	if crosshair:
@@ -42,6 +79,18 @@ func show_hit_marker():
 		_hit_tween.tween_interval(0.12)
 		_hit_tween.tween_callback(func(): crosshair.text = "+")
 		_hit_tween.tween_callback(func(): crosshair.add_theme_color_override("font_color", Color.WHITE))
+		
+func update_ammo(current: int, max_ammo: int, is_reloading: bool):
+	if not ammo_label: return
+	if is_reloading:
+		ammo_label.text = "RELOADING..."
+		ammo_label.add_theme_color_override("font_color", Color.RED)
+	else:
+		ammo_label.text = "%d / %d" % [current, max_ammo]
+		if current <= 0:
+			ammo_label.add_theme_color_override("font_color", Color.RED)
+		else:
+			ammo_label.add_theme_color_override("font_color", Color.WHITE)
 
 func _on_health_changed(new_health: float, max_health: float):
 	if health_bar:

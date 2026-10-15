@@ -14,10 +14,20 @@ var _attack_timer: float = 0.0
 var _knockback_velocity: Vector3 = Vector3.ZERO
 var is_vulnerable: bool = false
 
+var _target_point_ref: Node3D = null # Tracks which point we are heading to
+var _current_point_target: Vector3 = Vector3.ZERO # The specific random spot we chose inside the point
+
 @onready var health_component: HealthComponent = $HealthComponent
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var original_material: Material = mesh_instance.material_override if mesh_instance else null
 @onready var nav_agent: NavigationAgent3D = $NavAgent
+
+# --- AI Ability System ---
+var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0]
+var _ability_eval_timer: float = 0.0
+var _is_invulnerable: bool = false
+var _damage_reduction_multiplier: float = 1.0
+var _speed_multiplier: float = 1.0
 
 func _ready():
 	# Apply team color on spawn
@@ -59,8 +69,10 @@ func apply_knockback(force: Vector3):
 func take_damage(amount: float, _source_faction: int = -1):
 	if health_component.is_dead():
 		return
+	if _is_invulnerable:
+		return # Can't take damage while dashing!
 		
-	var final_damage = amount
+	var final_damage = amount * _damage_reduction_multiplier
 	if is_vulnerable:
 		final_damage *= 1.1 
 		
@@ -96,6 +108,13 @@ func _physics_process(delta: float):
 	if health_component.is_dead():
 		return
 
+	# --- MATCH COUNTDOWN GATE ---
+	if not GameManager.is_match_playing:
+		if not is_on_floor():
+			velocity.y -= gravity * delta
+		move_and_slide()
+		return # Bots stand still during countdown
+
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
@@ -125,7 +144,19 @@ func _physics_process(delta: float):
 			
 	# Priority 2: If not fighting, move towards the active Capture Point!
 	if GameManager and GameManager.active_capture_point:
-		target_destination = GameManager.active_capture_point.global_position
+		# Check if the active point has changed, or if we haven't picked a spot yet
+		if GameManager.active_capture_point != _target_point_ref:
+			_target_point_ref = GameManager.active_capture_point
+			
+			# Ask the capture point for a random position inside it!
+			if _target_point_ref.has_method("get_random_point_inside"):
+				_current_point_target = _target_point_ref.get_random_point_inside()
+			else:
+				_current_point_target = _target_point_ref.global_position
+				
+		# Set our destination to the specific random spot we chose
+		target_destination = _current_point_target
+		
 	elif combat_target:
 		# Fallback: If no point exists, just walk toward the nearest opponent
 		target_destination = combat_target.global_position
@@ -149,8 +180,8 @@ func _physics_process(delta: float):
 		
 		if direction.length() > 0.05: 
 			direction = direction.normalized()
-			velocity.x = direction.x * move_speed
-			velocity.z = direction.z * move_speed
+			velocity.x = direction.x * move_speed * _speed_multiplier
+			velocity.z = direction.z * move_speed * _speed_multiplier
 			rotation.y = atan2(-direction.x, -direction.z)
 		else:
 			velocity.x = move_toward(velocity.x, 0.0, move_speed)
@@ -173,9 +204,19 @@ func _physics_process(delta: float):
 	else:
 		_knockback_velocity = Vector3.ZERO
 
+	# --- AI Ability Evaluation ---
+	_ability_eval_timer -= delta
+	if _ability_eval_timer <= 0.0:
+		_ability_eval_timer = 0.5
+		_evaluate_abilities(combat_target)
+
 	move_and_slide()
 	
 func has_line_of_sight(target: Node3D) -> bool:
+	# Safety check: If the target doesn't exist anymore, we don't have line of sight!
+	if not is_instance_valid(target):
+		return false
+		
 	var space_state = get_world_3d().direct_space_state
 	var origin = global_position + Vector3(0, 0.5, 0)
 	var target_pos = target.global_position + Vector3(0, 0.5, 0)
@@ -197,9 +238,14 @@ func _find_nearest_target() -> Node3D:
 	var nearest_dist: float = INF
 	
 	for t in potential_targets:
-		if not is_instance_valid(t): continue
-		if t == self: continue
-		if not "faction" in t: continue
+		if not is_instance_valid(t): continue 
+		if t == self: continue 
+		if not "faction" in t: continue 
+		
+		# CRITICAL: Don't target dead players/bots!
+		if "is_alive" in t and not t.is_alive:
+			continue
+			
 		if t.faction == self.faction:
 			continue
 			
@@ -232,6 +278,135 @@ func _attack(target: Node3D):
 
 	if AudioManager:
 		AudioManager.play_shoot(global_position)
+		
+func _evaluate_abilities(target: Node3D):
+	if not character_class:
+		return
+		
+	# Safety check: If the target is dead/gone, don't try to use targeted abilities
+	var target_is_valid = is_instance_valid(target)
+		
+	# Decrease cooldowns
+	for i in range(3):
+		if ability_cooldowns[i] > 0:
+			ability_cooldowns[i] -= 0.5 
+			
+	var health_pct = health_component.current_health / health_component.max_health
+	var dist_to_target = INF
+	if target_is_valid:
+		dist_to_target = global_position.distance_to(target.global_position)
+		
+	# --- ABILITY 1 LOGIC ---
+	if ability_cooldowns[0] <= 0:
+		match character_class.ability_1_type:
+			CharacterClass.AbilityType.PHASE_DASH:
+				# Breacher: Dash if low health and enemy is close
+				if health_pct < 0.4 and dist_to_target < 8.0:
+					_bot_dash()
+			CharacterClass.AbilityType.GRAPPLE_HOOK:
+				# Ghost: Grapple if target is far away but visible
+				if dist_to_target > 15.0 and has_line_of_sight(target):
+					_bot_dash() # Reuse dash logic for a quick speed lunge
+			_:
+				pass
+				
+	# --- ABILITY 2 LOGIC ---
+	if ability_cooldowns[1] <= 0:
+		match character_class.ability_2_type:
+			CharacterClass.AbilityType.OVERCHARGE:
+				# Breacher: Overcharge if healthy and enemy is visible
+				if health_pct > 0.7 and dist_to_target < attack_range:
+					_bot_overcharge()
+			CharacterClass.AbilityType.BULWARK:
+				# Warden: Bulwark if health is dropping
+				if health_pct < 0.6:
+					_bot_bulwark()
+			CharacterClass.AbilityType.TARGET_LOCK:
+				# Ghost: Target lock if enemy is medium range
+				if dist_to_target < 15.0 and has_line_of_sight(target):
+					_bot_overcharge() # Reuse overcharge logic for a damage boost
+			_:
+				pass
+				
+	# --- ABILITY 3 LOGIC ---
+	if ability_cooldowns[2] <= 0:
+		match character_class.ability_3_type:
+			CharacterClass.AbilityType.ADRENALINE_SPIKE:
+				# Breacher: Adrenaline if very low health
+				if health_pct < 0.3:
+					_bot_adrenaline()
+			CharacterClass.AbilityType.DEPLOY_COVER:
+				# Warden: Deploy cover if on capture point and taking fire
+				if health_pct < 0.8 and GameManager.active_capture_point:
+					var dist_to_point = global_position.distance_to(GameManager.active_capture_point.global_position)
+					if dist_to_point < 6.0:
+						_bot_adrenaline() # Reuse adrenaline logic for a quick heal/speed to reposition
+			CharacterClass.AbilityType.SHOCKWAVE:
+				# Warden: Shockwave if enemy is very close
+				if dist_to_target < 5.0:
+					_bot_shockwave(target)
+			CharacterClass.AbilityType.LIFE_SIPHON:
+				# Ghost: Siphon if close and low health
+				if health_pct < 0.5 and dist_to_target < 10.0:
+					_bot_adrenaline() # Reuse as a heal
+			_:
+				pass
+
+func _bot_dash():
+	ability_cooldowns[0] = character_class.ability_1_cooldown
+	_is_invulnerable = true
+	_speed_multiplier = 3.0
+	_flash_ability_color(Color.CYAN)
+	await get_tree().create_timer(0.3).timeout
+	_is_invulnerable = false
+	_speed_multiplier = 1.0
+	if mesh_instance: mesh_instance.material_override = original_material
+
+func _bot_overcharge():
+	ability_cooldowns[1] = character_class.ability_2_cooldown
+	# For bots, overcharge/target lock just gives a damage boost. We simulate this by temporarily doubling their attack damage
+	attack_damage *= 1.5 
+	_flash_ability_color(Color.ORANGE)
+	await get_tree().create_timer(4.0).timeout
+	attack_damage /= 1.5
+	if mesh_instance: mesh_instance.material_override = original_material
+
+func _bot_bulwark():
+	ability_cooldowns[1] = character_class.ability_2_cooldown
+	_damage_reduction_multiplier = 0.5
+	_flash_ability_color(Color.DODGER_BLUE)
+	await get_tree().create_timer(4.0).timeout
+	_damage_reduction_multiplier = 1.0
+	if mesh_instance: mesh_instance.material_override = original_material
+
+func _bot_adrenaline():
+	ability_cooldowns[2] = character_class.ability_3_cooldown
+	health_component.current_health = min(health_component.max_health, health_component.current_health + 30)
+	_speed_multiplier = 1.5
+	_flash_ability_color(Color.YELLOW)
+	await get_tree().create_timer(2.0).timeout
+	_speed_multiplier = 1.0
+	if mesh_instance: mesh_instance.material_override = original_material
+
+func _bot_shockwave(target: Node3D):
+	ability_cooldowns[2] = character_class.ability_3_cooldown
+	_flash_ability_color(Color.RED)
+	
+	if target and is_instance_valid(target):
+		var push_dir = (target.global_position - global_position).normalized()
+		if target.has_method("apply_knockback"):
+			target.apply_knockback(push_dir * 15.0 + Vector3.UP * 5.0)
+			
+	await get_tree().create_timer(0.2).timeout
+	if mesh_instance: mesh_instance.material_override = original_material
+
+func _flash_ability_color(color: Color):
+	if not mesh_instance: return
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.emissive = color
+	mat.emissive_energy = 2.0
+	mesh_instance.material_override = mat
 
 func _spawn_bot_tracer(from: Vector3, to: Vector3):
 	var tracer = MeshInstance3D.new()

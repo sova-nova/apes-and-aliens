@@ -22,6 +22,8 @@ enum AbilityType {
 @export var gun_damage: float = 25.0
 @export var fire_rate: float = 0.12
 @export var gun_range: float = 100.0
+@export var mag_size: int = 30
+@export var reload_time: float = 1.5
 
 # Ability 1 (Q)
 @export var ability_1_type: AbilityType = AbilityType.NONE

@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://bypr7bk0ay1fu" path="res://scripts/player.gd" id="1_4flbx"]
 [ext_resource type="Script" uid="uid://vbls7s42ixmg" path="res://scripts/character_class.gd" id="2_onrkg"]
 [ext_resource type="Resource" uid="uid://cu8g84si2v42l" path="res://classes/breacher.tres" id="2_sweqy"]
-[ext_resource type="Resource" uid="uid://bqkmdeoltk2e1" path="res://classes/bulwark.tres" id="4_2hs0m"]
+[ext_resource type="Resource" uid="uid://bqkmdeoltk2e1" path="res://classes/warden.tres" id="4_2hs0m"]
 [ext_resource type="Resource" uid="uid://bbg47ysaxns68" path="res://classes/ghost.tres" id="5_1jxqw"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_onrkg"]

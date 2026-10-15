@@ -1,0 +1,23 @@
+[gd_scene load_steps=5 format=3 uid="uid://diwbrh0sx2aff"]
+
+[ext_resource type="Script" uid="uid://ui8qulg21hmg" path="res://scripts/spawn_area.gd" id="1_bpo2f"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ryheh"]
+size = Vector3(6, 3, 6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ryheh"]
+size = Vector3(6, 3, 6)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ryheh"]
+transparency = 1
+albedo_color = Color(0.7442305, 0.051414907, 0.5221684, 0.03137255)
+
+[node name="SpawnArea" type="Area3D"]
+script = ExtResource("1_bpo2f")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_ryheh")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_ryheh")
+surface_material_override/0 = SubResource("StandardMaterial3D_ryheh")
