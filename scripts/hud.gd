@@ -11,6 +11,8 @@ extends Control
 @onready var timer_label: Label = $VBoxContainer/TimerLabel
 @onready var countdown_label: Label = $CountdownLabel
 @onready var ammo_label: Label = $AmmoLabel
+@onready var kill_feed_vbox: VBoxContainer = $KillFeedVBox
+@onready var vignette_rect: ColorRect = $VignetteRect
 
 var _player: CharacterBody3D = null
 var _hit_tween: Tween = null
@@ -21,6 +23,8 @@ func _ready():
 		GameManager.objective_updated.connect(_on_objective_updated)
 		GameManager.match_timer_updated.connect(_on_match_timer_updated)
 		GameManager.match_state_changed.connect(_on_match_state_changed)
+		if not GameManager.kill_occurred.is_connected(_on_kill_occurred):
+			GameManager.kill_occurred.connect(_on_kill_occurred)
 
 func _process(_delta: float):
 	if not _player:
@@ -66,6 +70,28 @@ func _on_match_state_changed(new_state: String):
 			countdown_label.add_theme_color_override("font_color", Color.RED)
 		else:
 			countdown_label.add_theme_color_override("font_color", Color.WHITE)
+			
+func _on_kill_occurred(killer_name: String, victim_name: String, victim_faction: int):
+	if not kill_feed_vbox: return
+	
+	var label = Label.new()
+	# Format: "Killer -> Victim"
+	label.text = "%s -> %s" % [killer_name, victim_name]
+	
+	# Color the text based on who died
+	if victim_faction == PlayerSetup.selected_faction:
+		label.add_theme_color_override("font_color", Color.RED) # Ally died
+	else:
+		label.add_theme_color_override("font_color", Color.DODGER_BLUE) # Enemy died
+		
+	kill_feed_vbox.add_child(label)
+	
+	# Fade out and delete after 4 seconds
+	await get_tree().create_timer(4.0).timeout
+	if is_instance_valid(label):
+		var tween = label.create_tween()
+		tween.tween_property(label, "modulate:a", 0.0, 1.0)
+		tween.tween_callback(label.queue_free)
 
 func show_hit_marker():
 	if crosshair:
@@ -98,6 +124,16 @@ func _on_health_changed(new_health: float, max_health: float):
 		health_bar.value = new_health
 	if health_label:
 		health_label.text = "%d / %d" % [int(new_health), int(max_health)]
+		
+	# --- Vignette Logic ---
+	if vignette_rect and max_health > 0:
+		var health_pct = new_health / max_health
+		if health_pct < 0.3:
+			# Fade in red (Alpha goes up to 0.4)
+			var target_alpha = (0.3 - health_pct) / 0.3 * 0.4
+			vignette_rect.color.a = target_alpha
+		else:
+			vignette_rect.color.a = 0.0 # Fully transparent
 
 func _on_score_updated(alpha_score: int, bravo_score: int):
 	if alpha_score_label:

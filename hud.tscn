@@ -132,3 +132,22 @@ offset_left = -40.0
 offset_top = -23.0
 grow_horizontal = 0
 grow_vertical = 0
+
+[node name="KillFeedVBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -40.0
+offset_bottom = 40.0
+grow_horizontal = 0
+
+[node name="VignetteRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.003921569, 0, 0, 0)

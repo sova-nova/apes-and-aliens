@@ -19,6 +19,8 @@ var max_health: float = 100.0
 var current_health: float
 var is_alive: bool = true
 
+var last_attacker_name: String = ""
+
 var _can_shoot: bool = true
 var _shoot_cooldown: float = 0.0
 var current_ammo: int = 30
@@ -340,7 +342,7 @@ func shoot():
 					is_enemy = false # They are on our team, don't hurt them!
 			
 			if is_enemy:
-				collider.take_damage(current_gun_damage, faction)
+				collider.take_damage(current_gun_damage, faction, "Player")
 				
 				if collider.has_method("spawn_damage_number"):
 					collider.spawn_damage_number(current_gun_damage)
@@ -460,9 +462,13 @@ func _use_ability(slot: int):
 		CharacterClass.AbilityType.LIFE_SIPHON:
 			_life_siphon()
 
-func take_damage(amount: float, _source_faction: int = -1):
+func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = ""):
 	if _is_invulnerable:
 		return # Can't take damage while dashing!
+		
+	# Remember who shot us!
+	if attacker_name != "":
+		last_attacker_name = attacker_name
 		
 	# Apply damage reduction multiplier (1.0 normal, 0.5 if Bulwark is active)
 	var final_damage = amount * _damage_reduction_multiplier
@@ -809,7 +815,12 @@ func _end_siphon():
 
 func _handle_death():
 	is_alive = false
-	$CollisionShape3D.disabled = true # Make us physically invisible to raycasts
+	$CollisionShape3D.disabled = true
+	
+	# Broadcast Kill to HUD
+	var my_name = character_class.class_name_str if character_class else "Player"
+	GameManager.kill_occurred.emit(last_attacker_name, my_name, faction)
+	
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 	await get_tree().create_timer(3.0).timeout

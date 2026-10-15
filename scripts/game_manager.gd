@@ -5,6 +5,7 @@ signal game_won(winning_team: int)
 signal objective_updated(active_point_order: int)
 signal match_timer_updated(time_left: float)
 signal match_state_changed(new_state: String) # For Countdown, Playing, Overtime
+signal kill_occurred(killer_name: String, victim_name: String, victim_faction: int)
 
 var team_alpha_score: int = 0
 var team_bravo_score: int = 0

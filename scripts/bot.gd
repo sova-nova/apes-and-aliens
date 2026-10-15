@@ -21,6 +21,8 @@ var health_bar_mat: StandardMaterial3D
 var _target_point_ref: Node3D = null # Tracks which point we are heading to
 var _current_point_target: Vector3 = Vector3.ZERO # The specific random spot we chose inside the point
 
+var last_attacker_name: String = ""
+
 @onready var health_component: HealthComponent = $HealthComponent
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var original_material: Material = mesh_instance.material_override if mesh_instance else null
@@ -111,7 +113,7 @@ func apply_class():
 func apply_knockback(force: Vector3):
 	_knockback_velocity = force
 
-func take_damage(amount: float, _source_faction: int = -1):
+func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = ""):
 	if health_component.is_dead():
 		return
 	if _is_invulnerable:
@@ -121,9 +123,13 @@ func take_damage(amount: float, _source_faction: int = -1):
 	if is_vulnerable:
 		final_damage *= 1.1 
 		
+	# Remember who shot us!
+	if attacker_name != "":
+		last_attacker_name = attacker_name
+		
 	health_component.take_damage(final_damage)
 	_flash_damage()
-	update_health_bar() # <-- UPDATE THE BAR!
+	update_health_bar()
 	if AudioManager:
 		AudioManager.play_hit(global_position)
 		
@@ -173,6 +179,13 @@ func _flash_damage():
 	mesh_instance.material_override = original_material
 
 func _on_died():
+	# Broadcast Kill
+	var my_name = character_class.class_name_str if character_class else "Bot"
+	GameManager.kill_occurred.emit(last_attacker_name, my_name, faction)
+	
+	# Death Effect (We'll add this below)
+	_spawn_death_debris()
+	
 	var tween = create_tween()
 	tween.tween_property(self, "scale", Vector3.ZERO, 0.3).set_ease(Tween.EASE_IN)
 	tween.tween_callback(queue_free)
@@ -346,7 +359,8 @@ func _attack(target: Node3D):
 	
 	if result and result.collider == target:
 		if target.has_method("take_damage"):
-			target.take_damage(attack_damage, faction)
+			var my_name = character_class.class_name_str if character_class else "Bot"
+			target.take_damage(attack_damage, faction, my_name)
 			_spawn_bot_tracer(global_position + Vector3(0, 0.5, 0), result.position)
 
 	if AudioManager:
@@ -517,3 +531,49 @@ func spawn_damage_number(amount: float):
 	tween.tween_property(label, "global_position", label.global_position + Vector3(0, 1.5, 0), 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 	tween.parallel().tween_property(label, "scale", Vector3.ZERO, 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
 	tween.tween_callback(label.queue_free)
+
+func _spawn_death_debris():
+	var debris_count = 6
+	for i in range(debris_count):
+		var debris = RigidBody3D.new()
+		var mesh_inst = MeshInstance3D.new()
+		var col_shape = CollisionShape3D.new()
+		
+		var box_mesh = BoxMesh.new()
+		var box_shape = BoxShape3D.new()
+		
+		# Theme differences!
+		var mat = StandardMaterial3D.new()
+		if faction == 0: # Apes
+			box_mesh.size = Vector3(0.15, 0.15, 0.15)
+			box_shape.size = Vector3(0.15, 0.15, 0.15)
+			mat.albedo_color = Color.BURLYWOOD # Brown/yarn
+		else: # Aliens
+			box_mesh.size = Vector3(0.1, 0.1, 0.2) # Flat metal scraps
+			box_shape.size = Vector3(0.1, 0.1, 0.2)
+			mat.albedo_color = Color.LIGHT_GRAY
+			mat.emissive = Color.CYAN
+			mat.emissive_energy = 0.5
+			
+		mesh_inst.mesh = box_mesh
+		mesh_inst.material_override = mat
+		col_shape.shape = box_shape
+		
+		debris.add_child(mesh_inst)
+		debris.add_child(col_shape)
+		
+		# 1. ADD TO TREE FIRST! 
+		get_tree().root.add_child(debris)
+		
+		# 2. NOW set the position and velocity!
+		# Spawn at the bot's chest
+		debris.global_position = global_position + Vector3(0, 0.5, 0)
+		# Add some random offset so they don't spawn perfectly inside each other
+		debris.global_position += Vector3(randf_range(-0.3, 0.3), 0, randf_range(-0.3, 0.3))
+		
+		# Set velocity directly for the explosion
+		var explosion_dir = Vector3(randf_range(-1, 1), randf_range(1, 3), randf_range(-1, 1))
+		debris.linear_velocity = explosion_dir * 5.0
+		
+		# Clean up after 3 seconds so we don't lag the game
+		get_tree().create_timer(3.0).timeout.connect(debris.queue_free)
