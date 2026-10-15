@@ -30,15 +30,24 @@ func _spawn_player():
 	else:
 		player.global_position = Vector3(0, 1.25, 0) 
 		
+	# Add the player to the tree FIRST so _ready() runs and captures the mouse
+	add_child(player)
+	
 	# --- FACE THE BATTLEFIELD ---
-	# If there is an active capture point, rotate the player to face it!
+	# Now that the player is in the tree, apply the rotation
 	if GameManager and GameManager.active_capture_point:
 		var target_pos = GameManager.active_capture_point.global_position
 		var direction = target_pos - player.global_position
 		direction.y = 0.0 # Ignore vertical differences
 		
 		if direction.length_squared() > 0.01:
-			# atan2 calculates the exact Y rotation needed to face a direction
-			player.rotation.y = atan2(-direction.x, -direction.z)
-		
-	add_child(player)
+			# Look at the capture point
+			var target_transform = Transform3D().looking_at(direction, Vector3.UP)
+			player.rotation.y = target_transform.basis.get_euler().y
+			
+			# If they are still consistently facing backwards, uncomment this:
+			# player.rotation.y += PI
+			
+	# Ensure the camera is looking straight ahead, not tilted up/down
+	if player.has_node("CameraPivot"):
+		player.get_node("CameraPivot").rotation.x = 0.0

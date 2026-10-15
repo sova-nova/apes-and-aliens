@@ -14,6 +14,10 @@ var _attack_timer: float = 0.0
 var _knockback_velocity: Vector3 = Vector3.ZERO
 var is_vulnerable: bool = false
 
+var health_bar_pivot: Node3D
+var health_bar_mesh: MeshInstance3D
+var health_bar_mat: StandardMaterial3D
+
 var _target_point_ref: Node3D = null # Tracks which point we are heading to
 var _current_point_target: Vector3 = Vector3.ZERO # The specific random spot we chose inside the point
 
@@ -30,7 +34,7 @@ var _damage_reduction_multiplier: float = 1.0
 var _speed_multiplier: float = 1.0
 
 func _ready():
-	# Apply team color on spawn
+	# --- Apply Team Color ---
 	if mesh_instance:
 		var team_mat = StandardMaterial3D.new()
 		team_mat.roughness = 0.8
@@ -45,9 +49,50 @@ func _ready():
 	health_component.died.connect(_on_died)
 	add_to_group("bots")
 	
-	# Apply class stats if we have one
 	if character_class:
 		apply_class()
+		
+	# --- Generate Health Bar ---
+	var bar_container = Node3D.new()
+	bar_container.position.y = 1.8 # Float above head
+	add_child(bar_container)
+	
+	## 1. Background Bar (The dark "missing health" bar)
+	#var bg_mesh_inst = MeshInstance3D.new()
+	#var bg_mesh = QuadMesh.new()
+	#bg_mesh.size = Vector2(1.0, 0.1) # Vector2 for QuadMesh!
+	#bg_mesh_inst.mesh = bg_mesh
+	#var bg_mat = StandardMaterial3D.new()
+	#bg_mat.albedo_color = Color(0.1, 0.1, 0.1) # Dark grey
+	#bg_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	#bg_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED # Ignore sun
+	#bg_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # Visible from both sides
+	#bg_mesh_inst.material_override = bg_mat
+	#bar_container.add_child(bg_mesh_inst)
+	
+	# 2. Foreground Bar (The green/yellow/red bar)
+	health_bar_mesh = MeshInstance3D.new()
+	var fg_mesh = QuadMesh.new()
+	fg_mesh.size = Vector2(1.0, 0.1) # Vector2 for QuadMesh!
+	health_bar_mesh.mesh = fg_mesh
+	
+	# Push slightly forward in Z so it renders IN FRONT of the grey bar
+	health_bar_mesh.position.z = 0.001
+	
+	health_bar_mat = StandardMaterial3D.new()
+	health_bar_mat.albedo_color = Color.GREEN
+	health_bar_mat.emissive = Color.GREEN
+	health_bar_mat.emissive_energy = 1.0
+	health_bar_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	health_bar_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED # Ignore sun
+	health_bar_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # Visible from both sides
+	health_bar_mesh.material_override = health_bar_mat
+	
+	bar_container.add_child(health_bar_mesh)
+	
+	# Hide health bar if they are an enemy
+	if faction != PlayerSetup.selected_faction:
+		bar_container.visible = false
 
 func apply_class():
 	if not character_class:
@@ -70,7 +115,7 @@ func take_damage(amount: float, _source_faction: int = -1):
 	if health_component.is_dead():
 		return
 	if _is_invulnerable:
-		return # Can't take damage while dashing!
+		return 
 		
 	var final_damage = amount * _damage_reduction_multiplier
 	if is_vulnerable:
@@ -78,8 +123,36 @@ func take_damage(amount: float, _source_faction: int = -1):
 		
 	health_component.take_damage(final_damage)
 	_flash_damage()
+	update_health_bar() # <-- UPDATE THE BAR!
 	if AudioManager:
 		AudioManager.play_hit(global_position)
+		
+func update_health_bar():
+	if not health_bar_mesh or not health_bar_mesh.visible:
+		return
+		
+	if not health_component:
+		return
+		
+	var health_pct = health_component.current_health / health_component.max_health
+	var new_width = 1.0 * health_pct
+	
+	# 1. Change the size of the QuadMesh (Uses Vector2)
+	health_bar_mesh.mesh.size = Vector2(new_width, 0.1)
+	
+	# 2. Shift the mesh so its left edge stays pinned at -0.5
+	health_bar_mesh.position.x = -0.5 + (new_width / 2.0)
+	
+	# 3. Change color based on health percentage
+	if health_pct > 0.6:
+		health_bar_mat.albedo_color = Color.GREEN
+		health_bar_mat.emissive = Color.GREEN
+	elif health_pct > 0.3:
+		health_bar_mat.albedo_color = Color.YELLOW
+		health_bar_mat.emissive = Color.YELLOW
+	else:
+		health_bar_mat.albedo_color = Color.RED
+		health_bar_mat.emissive = Color.RED
 	
 func set_vulnerable(state: bool):
 	is_vulnerable = state

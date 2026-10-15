@@ -8,6 +8,9 @@ extends Area3D
 var is_active: bool = false
 signal point_captured(team: int)
 
+var progress_circle: MeshInstance3D
+var progress_mat: StandardMaterial3D
+
 var capture_progress: float = 0.0
 var controlling_team: int = -1 # -1 = Neutral, 0 = Alpha, 1 = Bravo
 var _tick_timer: float = 0.0
@@ -18,6 +21,26 @@ var is_contested: bool = false
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 
 func _ready():
+	# --- Create Progress Circle ---
+	progress_circle = MeshInstance3D.new()
+	var mesh = CylinderMesh.new()
+	mesh.top_radius = 4.5 # Slightly smaller than the 5.0 point radius
+	mesh.bottom_radius = 4.5
+	mesh.height = 0.1
+	progress_circle.mesh = mesh
+	
+	progress_mat = StandardMaterial3D.new()
+	progress_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	progress_mat.albedo_color = Color.WHITE
+	progress_mat.emissive = Color.WHITE
+	progress_mat.emissive_energy = 1.0
+	progress_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # See it from below too
+	progress_circle.material_override = progress_mat
+	
+	# Position slightly above the base platform
+	progress_circle.position.y = 0.15
+	add_child(progress_circle)
+	
 	update_visuals()
 
 func _physics_process(delta: float):
@@ -92,12 +115,23 @@ func _physics_process(delta: float):
 func update_ui():
 	if not status_label:
 		return
+		
+	# --- Update Progress Circle ---
+	var progress_pct = abs(capture_progress) / 100.0
+	# Scale the circle on X and Z to make it expand/contract
+	progress_circle.scale = Vector3(progress_pct, 1.0, progress_pct)
 	
-	if not is_active and controlling_team == -1:
-		status_label.text = "Point %s\n[LOCKED]" % point_name
-		return
-	
-	# Override text if contested
+	if capture_progress > 0: # Alpha is capturing
+		progress_mat.albedo_color = Color.DODGER_BLUE
+		progress_mat.emissive = Color.DODGER_BLUE
+	elif capture_progress < 0: # Bravo is capturing
+		progress_mat.albedo_color = Color.RED
+		progress_mat.emissive = Color.RED
+	else:
+		progress_mat.albedo_color = Color.WHITE
+		progress_mat.emissive = Color.WHITE
+		
+	# --- Update Text ---
 	if is_contested:
 		status_label.text = "Point %s\n[CONTESTED]" % point_name
 		return
