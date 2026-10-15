@@ -4,6 +4,8 @@ signal score_updated(team_alpha_score: int, team_bravo_score: int)
 signal game_won(winning_team: int)
 signal objective_updated(active_point_order: int)
 
+var active_capture_point: Node3D = null
+
 var team_alpha_score: int = 0
 var team_bravo_score: int = 0
 var score_to_win: int = 3 # First to capture 3 points wins!
@@ -35,9 +37,9 @@ func setup_level():
 	capture_points.assign(points)
 	capture_points.sort_custom(func(a, b): return a.point_order < b.point_order)
 	
-	# Unlock the first point!
 	if capture_points.size() > 0:
 		capture_points[0].is_active = true
+		active_capture_point = capture_points[0] # STORE IT
 		objective_updated.emit(capture_points[0].point_order)
 		
 	# Update HUD with 0 - 0 score
@@ -67,7 +69,9 @@ func _on_point_captured(team: int):
 		return
 		
 	# Advance the frontline!
-	current_point_index += 1
 	if current_point_index < capture_points.size():
+		current_point_index = team_alpha_score
+		print(current_point_index)
 		capture_points[current_point_index].is_active = true
+		active_capture_point = capture_points[current_point_index] # STORE IT
 		objective_updated.emit(capture_points[current_point_index].point_order)

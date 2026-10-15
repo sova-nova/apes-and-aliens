@@ -3,7 +3,14 @@ extends Node
 @export var max_bots_per_team: int = 5
 @export var spawn_interval: float = 4.0
 
-var enemy_scene = preload("res://enemy.tscn")
+# Automatically load the classes from your filesystem, no Inspector setup needed!
+var bot_classes: Array[CharacterClass] = [
+	preload("res://classes/breacher.tres"), # Replace with your actual filenames!
+	preload("res://classes/bulwark.tres"),
+	preload("res://classes/ghost.tres")
+]
+
+var enemy_scene = preload("res://bot.tscn")
 
 var _spawn_timer: float = 0.0
 
@@ -17,7 +24,7 @@ func _process(delta):
 func _try_spawn_team(team: int):
 	# Count how many bots of this team are currently alive
 	var current_bots = 0
-	for bot in get_tree().get_nodes_in_group("enemies"):
+	for bot in get_tree().get_nodes_in_group("bots"):
 		if is_instance_valid(bot) and bot.faction == team:
 			current_bots += 1
 			
@@ -42,7 +49,12 @@ func _spawn_bot(team: int):
 	# Instance the enemy
 	var new_bot = enemy_scene.instantiate()
 	new_bot.faction = team
-	new_bot.add_to_group("enemies") # Ensure they are in the enemies group
+	
+	# Assign a random class to the bot
+	if bot_classes.size() > 0:
+		new_bot.character_class = bot_classes.pick_random()
+	
+	new_bot.add_to_group("bots") # Ensure they are in the bots group
 	# If you want bots to heal each other later, you can add them to a "combatants" group too
 	
 	# Add it to the current scene (the level)

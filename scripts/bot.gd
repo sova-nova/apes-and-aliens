@@ -3,12 +3,13 @@ extends CharacterBody3D
 enum Faction { TEAM_ALPHA, TEAM_BRAVO }
 
 @export var faction: Faction = Faction.TEAM_BRAVO
-@export var move_speed: float = 2.5
-@export var attack_damage: float = 10.0
-@export var attack_range: float = 10.0
-@export var attack_cooldown: float = 1.0
+@export var character_class: CharacterClass
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+var move_speed: float = 3.0
+var attack_damage: float = 10.0
+var attack_range: float = 10.0
+var attack_cooldown: float = 1.0
 var _attack_timer: float = 0.0
 var _knockback_velocity: Vector3 = Vector3.ZERO
 var is_vulnerable: bool = false
@@ -29,11 +30,29 @@ func _ready():
 			team_mat.albedo_color = Color.RED
 			
 		mesh_instance.material_override = team_mat
-		original_material = team_mat # NOW it correctly saves the team color!
+		original_material = team_mat
 		
 	health_component.died.connect(_on_died)
-	add_to_group("enemies")
+	add_to_group("bots")
 	
+	# Apply class stats if we have one
+	if character_class:
+		apply_class()
+
+func apply_class():
+	if not character_class:
+		print("Bot missing CharacterClass!")
+		return
+		
+	move_speed = character_class.move_speed
+	attack_damage = character_class.gun_damage
+	attack_cooldown = character_class.fire_rate
+	attack_range = 15 # character_class.gun_range later
+	
+	if health_component:
+		health_component.max_health = character_class.max_health
+		health_component.current_health = character_class.max_health
+
 func apply_knockback(force: Vector3):
 	_knockback_velocity = force
 
@@ -43,14 +62,15 @@ func take_damage(amount: float, _source_faction: int = -1):
 		
 	var final_damage = amount
 	if is_vulnerable:
-		final_damage *= 1.1 # 10% extra damage from all sources!
+		final_damage *= 1.1 
 		
 	health_component.take_damage(final_damage)
 	_flash_damage()
+	if AudioManager:
+		AudioManager.play_hit(global_position)
 	
 func set_vulnerable(state: bool):
 	is_vulnerable = state
-	# Quick visual flash when debuffed
 	if state and mesh_instance:
 		var mat = StandardMaterial3D.new()
 		mat.albedo_color = Color.ORANGE
@@ -79,53 +99,72 @@ func _physics_process(delta: float):
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
-	var target = _find_nearest_target()
-	if target:
-		var to_target = target.global_position - global_position
-		to_target.y = 0.0 # Flatten Y for distance checks
+	# --- NEW AI LOGIC ---
+	var combat_target = _find_nearest_target()
+	var target_destination = Vector3.ZERO
+	
+	# Priority 1: If an opponent is in range and visible, fight them!
+	if combat_target:
+		var to_target = combat_target.global_position - global_position
+		to_target.y = 0.0
 		var dist = to_target.length()
 
-		# CRITICAL FIX: Only stop to shoot if in range AND we can see them!
-		if dist <= attack_range and has_line_of_sight(target):
-			# In range and clear view: attack
+		if dist <= attack_range and has_line_of_sight(combat_target):
+			# ATTACK MODE
 			velocity.x = move_toward(velocity.x, 0.0, move_speed)
 			velocity.z = move_toward(velocity.z, 0.0, move_speed)
 			
-			# Face the target when standing still
 			if to_target.length_squared() > 0.01:
 				rotation.y = atan2(-to_target.x, -to_target.z)
 			
 			_attack_timer -= delta
 			if _attack_timer <= 0.0:
-				_attack(target)
+				_attack(combat_target)
 				_attack_timer = attack_cooldown
-				
-		else:
-			# OUT OF RANGE OR BLOCKED BY A WALL: Keep pathing towards them!
-			nav_agent.target_position = target.global_position
+			return # Skip pathfinding if we are shooting
 			
-			if not nav_agent.is_navigation_finished():
-				var next_position = nav_agent.get_next_path_position()
-				var direction = (next_position - global_position)
-				direction.y = 0.0 # Ignore Y axis differences
-				
-				# If the direction is valid, use it
-				if direction.length() > 0.05: 
-					direction = direction.normalized()
-					velocity.x = direction.x * move_speed
-					velocity.z = direction.z * move_speed
-					rotation.y = atan2(-direction.x, -direction.z)
-				else:
-					# Stand still for a frame if too close to waypoint
-					velocity.x = move_toward(velocity.x, 0.0, move_speed)
-					velocity.z = move_toward(velocity.z, 0.0, move_speed)
-			else:
-				# Path finished, stand still
-				velocity.x = move_toward(velocity.x, 0.0, move_speed)
-				velocity.z = move_toward(velocity.z, 0.0, move_speed)
+	# Priority 2: If not fighting, move towards the active Capture Point!
+	if GameManager and GameManager.active_capture_point:
+		target_destination = GameManager.active_capture_point.global_position
+	elif combat_target:
+		# Fallback: If no point exists, just walk toward the nearest opponent
+		target_destination = combat_target.global_position
 	else:
+		# Stand still if nothing to do
 		velocity.x = move_toward(velocity.x, 0.0, move_speed)
 		velocity.z = move_toward(velocity.z, 0.0, move_speed)
+		move_and_slide()
+		return
+
+	# --- PATHFINDING MOVEMENT ---
+	# OPTIMIZATION: Only update the NavAgent's target if the destination actually moved > 1 meter.
+	# This stops the agent from restarting its path calculation every single frame.
+	if nav_agent.target_position.distance_to(target_destination) > 1.0:
+		nav_agent.target_position = target_destination
+		
+	if not nav_agent.is_navigation_finished():
+		var next_position = nav_agent.get_next_path_position()
+		var direction = (next_position - global_position)
+		direction.y = 0.0 
+		
+		if direction.length() > 0.05: 
+			direction = direction.normalized()
+			velocity.x = direction.x * move_speed
+			velocity.z = direction.z * move_speed
+			rotation.y = atan2(-direction.x, -direction.z)
+		else:
+			velocity.x = move_toward(velocity.x, 0.0, move_speed)
+			velocity.z = move_toward(velocity.z, 0.0, move_speed)
+	else:
+		# Path is finished (We reached the capture point)
+		# Stop moving, but face the center of the point so we contest it!
+		velocity.x = move_toward(velocity.x, 0.0, move_speed)
+		velocity.z = move_toward(velocity.z, 0.0, move_speed)
+		
+		var to_point = target_destination - global_position
+		to_point.y = 0.0
+		if to_point.length_squared() > 0.01:
+			rotation.y = atan2(-to_point.x, -to_point.z)
 
 	# Apply Knockback if any
 	if _knockback_velocity.length() > 0.1:
@@ -138,40 +177,29 @@ func _physics_process(delta: float):
 	
 func has_line_of_sight(target: Node3D) -> bool:
 	var space_state = get_world_3d().direct_space_state
-	
-	# Start the ray from the enemy's chest, aim at the target's chest
 	var origin = global_position + Vector3(0, 0.5, 0)
 	var target_pos = target.global_position + Vector3(0, 0.5, 0)
-	
 	var query = PhysicsRayQueryParameters3D.create(origin, target_pos)
-	query.exclude = [self.get_rid()] # Make sure the ray doesn't hit the enemy's own body
-	
+	query.exclude = [self.get_rid()] 
 	var result = space_state.intersect_ray(query)
-	
-	# If the ray hits nothing (shot into the sky), or hits the target directly, we have LoS
 	if result.is_empty():
 		return true
 	if result.collider == target:
 		return true
-		
-	# If the ray hit anything else (a wall, a crate, another bot), we do NOT have LoS
 	return false
 
 func _find_nearest_target() -> Node3D:
 	var potential_targets = []
-	# Combine both players and enemies into one list of everyone on the map
 	potential_targets.append_array(get_tree().get_nodes_in_group("players"))
-	potential_targets.append_array(get_tree().get_nodes_in_group("enemies"))
+	potential_targets.append_array(get_tree().get_nodes_in_group("bots"))
 	
 	var nearest: Node3D = null
 	var nearest_dist: float = INF
 	
 	for t in potential_targets:
-		if not is_instance_valid(t): continue # Skip deleted nodes
-		if t == self: continue # Don't target yourself!
-		if not "faction" in t: continue # Skip nodes that don't have a faction
-		
-		# CRITICAL: Only target those on the OPPOSING team
+		if not is_instance_valid(t): continue
+		if t == self: continue
+		if not "faction" in t: continue
 		if t.faction == self.faction:
 			continue
 			
@@ -184,31 +212,28 @@ func _find_nearest_target() -> Node3D:
 
 func _attack(target: Node3D):
 	_attack_timer = attack_cooldown
-	
-	# Face the player before shooting
 	var to_target = target.global_position - global_position
 	to_target.y = 0.0
 	rotation.y = atan2(-to_target.x, -to_target.z)
 	
-	# Create a raycast dynamically to check if they can see the player
 	var space_state = get_world_3d().direct_space_state
 	var query = PhysicsRayQueryParameters3D.create(
-		global_position + Vector3(0, 0.5, 0), # Shoot from roughly chest height
-		target.global_position + Vector3(0, 0.5, 0) # Aim at player chest
+		global_position + Vector3(0, 0.5, 0), 
+		target.global_position + Vector3(0, 0.5, 0) 
 	)
-	# Don't shoot ourselves
 	query.exclude = [self.get_rid()] 
 	
 	var result = space_state.intersect_ray(query)
 	
-	# If the ray hit something, and that something is the player
 	if result and result.collider == target:
 		if target.has_method("take_damage"):
 			target.take_damage(attack_damage, faction)
-			# Spawn a red flash on the player to indicate they got hit
-			_spawn_enemy_tracer(global_position + Vector3(0, 0.5, 0), result.position)
+			_spawn_bot_tracer(global_position + Vector3(0, 0.5, 0), result.position)
 
-func _spawn_enemy_tracer(from: Vector3, to: Vector3):
+	if AudioManager:
+		AudioManager.play_shoot(global_position)
+
+func _spawn_bot_tracer(from: Vector3, to: Vector3):
 	var tracer = MeshInstance3D.new()
 	var sphere = SphereMesh.new()
 	sphere.radius = 0.05
@@ -229,36 +254,18 @@ func _spawn_enemy_tracer(from: Vector3, to: Vector3):
 	tween.tween_callback(tracer.queue_free)
 
 func spawn_damage_number(amount: float):
-	# 1. Create the 3D text label
 	var label = Label3D.new()
 	label.text = str(int(amount))
-	
-		# 2. Make it big and readable
 	label.font_size = 64
-	label.modulate = Color.YELLOW # <-- ADD THIS LINE RIGHT HERE
+	label.modulate = Color.YELLOW
 	label.pixel_size = 0.01 
-
-	# 3. Add a thick black outline so we can read it against the sky
 	label.outline_size = 10
 	label.outline_modulate = Color.BLACK
-
-	# 4. Make it face the camera
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED 
-
-	# 5. Position it above the enemy's head
 	label.global_position = global_position + Vector3(0, 1.5, 0)
-
-	# 6. Add it to the root scene tree
 	get_tree().root.add_child(label)
 
-	# 7. Attach the tween to the label
 	var tween = label.create_tween()
-
-	# 8. Float upward
 	tween.tween_property(label, "global_position", label.global_position + Vector3(0, 1.5, 0), 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-
-	# 9. Shrink to nothing (This replaces the broken fade-out!)
 	tween.parallel().tween_property(label, "scale", Vector3.ZERO, 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
-
-	# 10. Despawn when finished
 	tween.tween_callback(label.queue_free)

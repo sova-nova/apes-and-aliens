@@ -1,34 +1,54 @@
 extends Node
 
-# We will assign these in the Project Settings Inspector!
-@export var shoot_sfx: AudioStream
-@export var hit_sfx: AudioStream
-@export var ability_sfx: AudioStream
-@export var capture_sfx: AudioStream
+# Preload the sounds
+var shoot_sfx = preload("res://assets/audio/shoot.ogg")
+var hit_sfx = preload("res://assets/audio/hit.ogg")
+var capture_sfx = preload("res://assets/audio/capture.ogg")
 
-func play_shoot():
-	_play(shoot_sfx)
+# Ability SFX
+var bulwark_sfx = preload("res://assets/audio/bulwark.ogg")
 
-func play_hit():
-	_play(hit_sfx)
+# --- POSITIONAL 3D SOUNDS ---
+# These take a Vector3 position so they play in the 3D world
 
-func play_ability():
-	_play(ability_sfx)
+func play_shoot(pos: Vector3):
+	_play_3d(shoot_sfx, pos)
+
+func play_hit(pos: Vector3):
+	_play_3d(hit_sfx, pos)
+
+func play_bulwark(pos: Vector3):
+	_play_3d(bulwark_sfx, pos)
+
+# --- GLOBAL 2D SOUNDS ---
+# Capture points are global, so they don't need a position
 
 func play_capture():
-	_play(capture_sfx)
+	_play_global(capture_sfx)
 
-# The internal function that actually plays the sound
-func _play(stream: AudioStream):
+# --- INTERNAL ENGINE ---
+
+func _play_3d(stream: AudioStream, pos: Vector3):
 	if stream == null:
-		return # If no sound is assigned, do nothing (prevents crashes!)
+		return 
 		
-	# Create a temporary audio player
+	var player = AudioStreamPlayer3D.new()
+	player.stream = stream
+	player.global_position = pos # Set the 3D position!
+	
+	# We must add 3D sounds to the actual game scene, not the Autoload root
+	get_tree().root.add_child(player)
+	player.play()
+	
+	player.finished.connect(player.queue_free)
+
+func _play_global(stream: AudioStream):
+	if stream == null:
+		return 
+		
 	var player = AudioStreamPlayer.new()
 	player.stream = stream
-	player.bus = "Master"
 	add_child(player)
 	player.play()
 	
-	# Clean up the player when the sound finishes so we don't leak memory
 	player.finished.connect(player.queue_free)

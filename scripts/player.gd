@@ -272,6 +272,7 @@ func shoot():
 	_shoot_cooldown = current_fire_rate
 
 	_flash_muzzle()
+	AudioManager.play_shoot(muzzle.global_position)
 	_apply_screen_shake(0.1)
 
 	aim_ray.force_raycast_update()
@@ -406,6 +407,7 @@ func _use_ability(slot: int):
 		CharacterClass.AbilityType.DEPLOY_COVER:
 			_deploy_cover()
 		CharacterClass.AbilityType.BULWARK:
+			AudioManager.play_bulwark(global_position)
 			_bulwark_ability()
 		CharacterClass.AbilityType.SHOCKWAVE:
 			_shockwave()
@@ -425,7 +427,11 @@ func take_damage(amount: float, _source_faction: int = -1):
 	
 	current_health = max(0.0, current_health - final_damage)
 	health_changed.emit(current_health, max_health)
+	
+	# Interactions
+	AudioManager.play_hit(global_position)
 	_apply_screen_shake(0.2)
+	
 	if current_health <= 0.0:
 		died.emit()
 		_handle_death()
@@ -613,7 +619,7 @@ func _bulwark_ability():
 
 func _shockwave():
 	# Push all enemies within 5 meters away
-	var enemies = get_tree().get_nodes_in_group("enemies")
+	var enemies = get_tree().get_nodes_in_group("bots")
 	for enemy in enemies:
 		if not is_instance_valid(enemy): continue
 		var dist = global_position.distance_to(enemy.global_position)

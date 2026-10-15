@@ -63,13 +63,14 @@ func _physics_process(delta: float):
 		if capture_progress >= 100.0:
 			new_controlling_team = 0
 			if controlling_team != 0: # Only emit the signal the moment it flips
+				AudioManager.play_capture()
 				point_captured.emit(0)
 				is_active = false # Lock the point so it can't be recaptured
 		elif capture_progress <= -100.0:
 			new_controlling_team = 1
 			if controlling_team != 1:
 				point_captured.emit(1)
-				is_active = false
+				is_active = true
 
 		# If control changed, update the color
 		if new_controlling_team != controlling_team:
