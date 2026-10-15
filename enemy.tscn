@@ -32,4 +32,3 @@ metadata/_custom_type_script = "uid://xq2mu6hob3et"
 path_desired_distance = 0.5
 path_height_offset = 0.75
 path_search_max_distance = 100.0
-debug_enabled = true

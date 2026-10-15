@@ -12,13 +12,26 @@ var capture_points: Array = []
 var current_point_index: int = 0
 
 func _ready():
+	# Autoloads run on boot. We do nothing here because the level isn't loaded yet.
+	pass
+
+func setup_level():
+	# Reset scores for a new match
+	team_alpha_score = 0
+	team_bravo_score = 0
+	current_point_index = 0
+	capture_points.clear()
+	
 	# Wait a frame so the level nodes are fully loaded
 	await get_tree().process_frame
 	
 	# Find all capture points and sort them by their 'point_order' export
 	var points = get_tree().get_nodes_in_group("capture_points")
 	for p in points:
-		p.point_captured.connect(_on_point_captured)
+		# Disconnect any old signals just in case, then connect
+		if not p.point_captured.is_connected(_on_point_captured):
+			p.point_captured.connect(_on_point_captured)
+			
 	capture_points.assign(points)
 	capture_points.sort_custom(func(a, b): return a.point_order < b.point_order)
 	
@@ -26,6 +39,9 @@ func _ready():
 	if capture_points.size() > 0:
 		capture_points[0].is_active = true
 		objective_updated.emit(capture_points[0].point_order)
+		
+	# Update HUD with 0 - 0 score
+	score_updated.emit(team_alpha_score, team_bravo_score)
 
 func _on_point_captured(team: int):
 	# Give a point to the team that captured it
@@ -40,12 +56,14 @@ func _on_point_captured(team: int):
 	if team_alpha_score >= score_to_win:
 		game_won.emit(0)
 		print("TEAM ALPHA WINS!")
-		get_tree().paused = true
+		await get_tree().create_timer(2.0).timeout
+		get_tree().change_scene_to_file("res://round_end.tscn")
 		return
 	elif team_bravo_score >= score_to_win:
 		game_won.emit(1)
 		print("TEAM BRAVO WINS!")
-		get_tree().paused = true
+		await get_tree().create_timer(2.0).timeout
+		get_tree().change_scene_to_file("res://round_end.tscn")
 		return
 		
 	# Advance the frontline!

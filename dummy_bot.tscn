@@ -1,0 +1,29 @@
+[gd_scene load_steps=5 format=3 uid="uid://5j8xgii2m3j3"]
+
+[ext_resource type="Script" uid="uid://dmls1rmdr6dxf" path="res://scripts/dummy_bot.gd" id="1_k5kuy"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_s8di0"]
+radius = 0.3
+height = 1.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_06lqy"]
+albedo_color = Color(0, 0.9250028, 0.62071866, 1)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_l4lyp"]
+radius = 0.3
+height = 1.5
+
+[node name="DummyBot" type="CharacterBody3D"]
+script = ExtResource("1_k5kuy")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_s8di0")
+surface_material_override/0 = SubResource("StandardMaterial3D_06lqy")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_l4lyp")
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+path_desired_distance = 0.5
+target_desired_distance = 0.5
+path_height_offset = 0.75

@@ -85,37 +85,9 @@ func _physics_process(delta: float):
 		to_target.y = 0.0 # Flatten Y for distance checks
 		var dist = to_target.length()
 
-		if dist > attack_range:
-			# --- PATHFINDING MOVEMENT ---
-			nav_agent.target_position = target.global_position
-			
-			# Check if the NavAgent has a valid path in progress
-			if not nav_agent.is_navigation_finished():
-				var next_position = nav_agent.get_next_path_position()
-				var direction = (next_position - global_position)
-				direction.y = 0.0 # Ignore Y axis differences
-				
-				# If the direction is valid, use it
-				if direction.length_squared() > 0.01: 
-					direction = direction.normalized()
-					velocity.x = direction.x * move_speed
-					velocity.z = direction.z * move_speed
-					rotation.y = atan2(-direction.x, -direction.z)
-				else:
-					# Fallback: If next position is too close, walk directly
-					var direct_dir = to_target.normalized()
-					velocity.x = direct_dir.x * move_speed
-					velocity.z = direct_dir.z * move_speed
-					rotation.y = atan2(-direct_dir.x, -direct_dir.z)
-			else:
-				# Fallback: NavAgent finished or failed, walk directly
-				var direct_dir = to_target.normalized()
-				velocity.x = direct_dir.x * move_speed
-				velocity.z = direct_dir.z * move_speed
-				rotation.y = atan2(-direct_dir.x, -direct_dir.z)
-
-		else:
-			# In range: attack
+		# CRITICAL FIX: Only stop to shoot if in range AND we can see them!
+		if dist <= attack_range and has_line_of_sight(target):
+			# In range and clear view: attack
 			velocity.x = move_toward(velocity.x, 0.0, move_speed)
 			velocity.z = move_toward(velocity.z, 0.0, move_speed)
 			
@@ -127,6 +99,30 @@ func _physics_process(delta: float):
 			if _attack_timer <= 0.0:
 				_attack(target)
 				_attack_timer = attack_cooldown
+				
+		else:
+			# OUT OF RANGE OR BLOCKED BY A WALL: Keep pathing towards them!
+			nav_agent.target_position = target.global_position
+			
+			if not nav_agent.is_navigation_finished():
+				var next_position = nav_agent.get_next_path_position()
+				var direction = (next_position - global_position)
+				direction.y = 0.0 # Ignore Y axis differences
+				
+				# If the direction is valid, use it
+				if direction.length() > 0.05: 
+					direction = direction.normalized()
+					velocity.x = direction.x * move_speed
+					velocity.z = direction.z * move_speed
+					rotation.y = atan2(-direction.x, -direction.z)
+				else:
+					# Stand still for a frame if too close to waypoint
+					velocity.x = move_toward(velocity.x, 0.0, move_speed)
+					velocity.z = move_toward(velocity.z, 0.0, move_speed)
+			else:
+				# Path finished, stand still
+				velocity.x = move_toward(velocity.x, 0.0, move_speed)
+				velocity.z = move_toward(velocity.z, 0.0, move_speed)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, move_speed)
 		velocity.z = move_toward(velocity.z, 0.0, move_speed)

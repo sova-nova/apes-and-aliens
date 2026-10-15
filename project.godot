@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Ravenfield"
-run/main_scene="uid://wjow2t6wmine"
+run/main_scene="uid://dy8ke0r838of0"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -20,6 +20,8 @@ config/icon="res://icon.svg"
 HUD="*res://hud.tscn"
 GameManager="*res://scripts/game_manager.gd"
 BotManager="*res://scripts/bot_manager.gd"
+PlayerSetup="*res://scripts/player_setup.gd"
+AudioManager="*res://scripts/audio_manager.gd"
 
 [editor]
 

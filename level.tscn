@@ -1,5 +1,6 @@
-[gd_scene load_steps=14 format=3 uid="uid://wjow2t6wmine"]
+[gd_scene load_steps=15 format=3 uid="uid://wjow2t6wmine"]
 
+[ext_resource type="Script" uid="uid://cwibtburi5w1f" path="res://level.gd" id="1_n6hdu"]
 [ext_resource type="PackedScene" uid="uid://mqppgwtxw1e7" path="res://player.tscn" id="1_u52ul"]
 [ext_resource type="PackedScene" uid="uid://y6fevln53g2u" path="res://capture_point.tscn" id="3_oi3di"]
 [ext_resource type="PackedScene" uid="uid://tdnf46tifcxj" path="res://assets/wall_segment_a.tscn" id="4_0b4ue"]
@@ -35,6 +36,7 @@ geometry_source_group_name = &"navigation_mesh_source"
 agent_height = 2.0
 
 [node name="Level" type="Node3D"]
+script = ExtResource("1_n6hdu")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="." groups=["navigation_mesh_source"]]
 
@@ -54,6 +56,7 @@ shadow_enabled = true
 environment = SubResource("Environment_0b4ue")
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 navigation_mesh = SubResource("NavigationMesh_1ainy")
 
 [node name="Player" parent="." instance=ExtResource("1_u52ul")]
@@ -148,21 +151,6 @@ transform = Transform3D(0.8660254, 0, 0.5, 0, 1, 0, -0.5, 0, 0.8660254, -4, 1.5,
 [node name="FieldWall9" parent="Field" instance=ExtResource("4_0b4ue")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 33)
 
-[node name="Pillar1" parent="Field" instance=ExtResource("6_1ainy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.5, 24)
-
-[node name="Pillar2" parent="Field" instance=ExtResource("6_1ainy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11, 5.5, 20)
-
-[node name="Pillar3" parent="Field" instance=ExtResource("6_1ainy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 5.5, -3)
-
-[node name="Pillar4" parent="Field" instance=ExtResource("6_1ainy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 5.5, -5)
-
-[node name="Pillar5" parent="Field" instance=ExtResource("6_1ainy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 5.5, 29)
-
 [node name="FieldWall2" parent="Field" instance=ExtResource("4_0b4ue")]
 transform = Transform3D(0.8660254, 0, -0.5, 0, 1, 0, 0.5, 0, 0.8660254, -12, 1.5, 40)
 
@@ -186,9 +174,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1, 21)
 
 [node name="Crate3" parent="Field" instance=ExtResource("7_n6hdu")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 1, 17)
-
-[node name="Pillar6" parent="Field" instance=ExtResource("6_1ainy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 5, 12)
 
 [node name="Crate4" parent="Field" instance=ExtResource("7_n6hdu")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21, 1, 16)
@@ -226,9 +211,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 1, -30)
 [node name="FieldWall11" parent="Field" instance=ExtResource("4_0b4ue")]
 transform = Transform3D(0.70710677, 0, -0.70710677, 0, 1, 0, 0.70710677, 0, 0.70710677, -16, 1.5, -30)
 
-[node name="Pillar11" parent="Field" instance=ExtResource("6_1ainy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 5.5, -44)
-
 [node name="Crate12" parent="Field" instance=ExtResource("7_n6hdu")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -21, 1, -26)
 
@@ -255,6 +237,27 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1, -43)
 
 [node name="Crate16" parent="Field" instance=ExtResource("7_n6hdu")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11, 1, -42)
+
+[node name="Pillar1" parent="Field" instance=ExtResource("6_1ainy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.5, 24)
+
+[node name="Pillar2" parent="Field" instance=ExtResource("6_1ainy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11, 5.5, 20)
+
+[node name="Pillar3" parent="Field" instance=ExtResource("6_1ainy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 5.5, -3)
+
+[node name="Pillar4" parent="Field" instance=ExtResource("6_1ainy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 5.5, -5)
+
+[node name="Pillar5" parent="Field" instance=ExtResource("6_1ainy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 5.5, 29)
+
+[node name="Pillar6" parent="Field" instance=ExtResource("6_1ainy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 5, 12)
+
+[node name="Pillar11" parent="Field" instance=ExtResource("6_1ainy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 5.5, -44)
 
 [node name="Pillar9" parent="Field" instance=ExtResource("6_1ainy")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19, 5.5, -38)

@@ -65,6 +65,11 @@ func _ready():
 	if muzzle_flash:
 		muzzle_flash.light_energy = 0.0
 	
+	# --- APPLY SETUP DATA ---
+	faction = PlayerSetup.selected_faction
+	if available_classes.size() > PlayerSetup.selected_class_index:
+		character_class = available_classes[PlayerSetup.selected_class_index]
+		
 	apply_class()
 
 func apply_class():
@@ -100,6 +105,13 @@ func _unhandled_input(event: InputEvent):
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		else:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			
+func _apply_screen_shake(amount: float = 0.05):
+	var tween = create_tween()
+	tween.tween_property(camera_3d, "h_offset", randf_range(-amount, amount), 0.05)
+	tween.tween_property(camera_3d, "h_offset", 0.0, 0.05)
+	tween.parallel().tween_property(camera_3d, "v_offset", randf_range(-amount, amount), 0.05)
+	tween.parallel().tween_property(camera_3d, "v_offset", 0.0, 0.05)
 
 func _physics_process(delta: float):
 	# --- Shoot cooldown ---
@@ -260,6 +272,7 @@ func shoot():
 	_shoot_cooldown = current_fire_rate
 
 	_flash_muzzle()
+	_apply_screen_shake(0.1)
 
 	aim_ray.force_raycast_update()
 
@@ -412,6 +425,7 @@ func take_damage(amount: float, _source_faction: int = -1):
 	
 	current_health = max(0.0, current_health - final_damage)
 	health_changed.emit(current_health, max_health)
+	_apply_screen_shake(0.2)
 	if current_health <= 0.0:
 		died.emit()
 		_handle_death()
