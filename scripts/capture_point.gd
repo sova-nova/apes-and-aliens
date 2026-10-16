@@ -1,193 +1,159 @@
 extends Area3D
 
 @export var point_name: String = "A"
-@export var capture_speed: float = 20.0
-@export var score_tick_time: float = 1.0
-@export var point_order: int = 0 # 0 for A, 1 for B, 2 for C
+@export var capture_speed: float = 20.0          ## Progress per second, per attacker
+@export var max_counted_attackers: int = 3       ## Extra attackers beyond this don't speed it up
+@export var defender_reset_speed: float = 30.0   ## Progress removed per second when only defenders are present
+@export var idle_decay_speed: float = 0.0        ## Optional slow decay when nobody is on the point
+@export var point_order: int = 0                 ## 0 for A, 1 for B, 2 for C
+
+signal point_captured(team: int)
 
 var is_active: bool = false
-signal point_captured(team: int)
+var is_captured: bool = false
+var is_contested: bool = false
+var capture_progress: float = 0.0 # 0..100, always the ATTACKERS' progress
+var controlling_team: int = -1    # -1 until captured, then the attacking team
+var attackers_on_point: int = 0
+var defenders_on_point: int = 0
 
 var progress_circle: MeshInstance3D
 var progress_mat: StandardMaterial3D
-
-var capture_progress: float = 0.0
-var controlling_team: int = -1 # -1 = Neutral, 0 = Alpha, 1 = Bravo
-var _tick_timer: float = 0.0
-var is_contested: bool = false
 
 @onready var status_label: Label3D = $StatusLabel
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 
 func _ready():
-	# --- Create Progress Circle ---
 	progress_circle = MeshInstance3D.new()
 	var mesh = CylinderMesh.new()
-	mesh.top_radius = 4.5 # Slightly smaller than the 5.0 point radius
+	mesh.top_radius = 4.5
 	mesh.bottom_radius = 4.5
 	mesh.height = 0.1
 	progress_circle.mesh = mesh
-	
+
 	progress_mat = StandardMaterial3D.new()
 	progress_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	progress_mat.albedo_color = Color.WHITE
-	#progress_mat.emissive = Color.WHITE
-	#progress_mat.emissive_energy = 1.0
-	progress_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # See it from below too
+	progress_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	progress_circle.material_override = progress_mat
-	
-	# Position slightly above the base platform
+
 	progress_circle.position.y = 0.15
 	add_child(progress_circle)
-	
+
 	update_visuals()
 
 func _physics_process(delta: float):
-	var alpha_players = 0
-	var bravo_players = 0
-	
-	# If the point is locked (previous point not captured), do nothing
-	if not is_active:
-		update_ui() # Keep UI updated to show it's locked
+	if not is_active or not GameManager.is_match_playing:
+		update_ui()
 		return
 
-	# Look at everyone standing on the point
-	for body in get_overlapping_bodies():
-		if "faction" in body:
-			if body.faction == 0: # TEAM_ALPHA
-				alpha_players += 1
-			elif body.faction == 1: # TEAM_BRAVO
-				bravo_players += 1
+	_count_occupants()
 
-	# Check if the contested state has changed
 	var was_contested = is_contested
-	is_contested = (alpha_players > 0 and bravo_players > 0)
-	
-	# If it just became contested, or just stopped being contested, update the color
+	is_contested = attackers_on_point > 0 and defenders_on_point > 0
 	if was_contested != is_contested:
 		update_visuals()
 
-	# Only allow progress to change if the point is NOT contested
+	# Contested = frozen. Otherwise attackers push, defenders push back.
 	if not is_contested:
-		var net_force = alpha_players - bravo_players
+		if attackers_on_point > 0:
+			var counted = min(attackers_on_point, max_counted_attackers)
+			capture_progress += counted * capture_speed * delta
+		elif defenders_on_point > 0:
+			capture_progress -= defender_reset_speed * delta
+		elif idle_decay_speed > 0.0:
+			capture_progress -= idle_decay_speed * delta
 
-		if net_force != 0:
-			capture_progress += net_force * capture_speed * delta
-			capture_progress = clamp(capture_progress, -100.0, 100.0)
+		capture_progress = clampf(capture_progress, 0.0, 100.0)
 
-		# Check if a team has fully captured it
-		var new_controlling_team = controlling_team
-		#if capture_progress >= 100.0:
-			#new_controlling_team = 0
-		#elif capture_progress <= -100.0:
-			#new_controlling_team = 1
-		#elif abs(capture_progress) < 1.0:
-			#new_controlling_team = -1
-			
 		if capture_progress >= 100.0:
-			new_controlling_team = 0
-			if controlling_team != 0: # Only emit the signal the moment it flips
-				AudioManager.play_capture()
-				point_captured.emit(0)
-				is_active = false # Lock the point so it can't be recaptured
-		elif capture_progress <= -100.0:
-			new_controlling_team = 1
-			if controlling_team != 1:
-				point_captured.emit(1)
-				is_active = true
+			_complete_capture()
+			return
 
-		# If control changed, update the color
-		if new_controlling_team != controlling_team:
-			controlling_team = new_controlling_team
-			update_visuals()
-
-	# Update the UI text
 	update_ui()
 
-	# Only give points if the point is owned AND NOT contested
-	#if controlling_team != -1 and not is_contested:
-		#_tick_timer -= delta
-		#if _tick_timer <= 0.0:
-			#_tick_timer = score_tick_time
-			#GameManager.add_score(controlling_team, 1)
+func _count_occupants():
+	attackers_on_point = 0
+	defenders_on_point = 0
+
+	for body in get_overlapping_bodies():
+		if not ("faction" in body):
+			continue
+		# Dead players/bots don't count (bots linger for a moment while shrinking)
+		if "is_alive" in body and not body.is_alive:
+			continue
+		if "health_component" in body and body.health_component and body.health_component.is_dead():
+			continue
+
+		if body.faction == GameManager.attacking_team:
+			attackers_on_point += 1
+		elif body.faction == GameManager.defending_team:
+			defenders_on_point += 1
+
+func _complete_capture():
+	is_captured = true
+	is_active = false # Lock it; it can't be retaken
+	is_contested = false
+	capture_progress = 100.0
+	controlling_team = GameManager.attacking_team
+
+	AudioManager.play_capture()
+	update_visuals()
+	update_ui()
+	point_captured.emit(controlling_team) # Emit last: GameManager reacts to it
+
+## GameManager asks this when time runs out.
+func should_hold_overtime() -> bool:
+	return is_active and (is_contested or (attackers_on_point > 0 and capture_progress > 0.0))
 
 func update_ui():
 	if not status_label:
 		return
-		
-	# --- Update Progress Circle ---
-	var progress_pct = abs(capture_progress) / 100.0
-	# Scale the circle on X and Z to make it expand/contract
-	progress_circle.scale = Vector3(progress_pct, 1.0, progress_pct)
-	
-	if capture_progress > 0: # Alpha is capturing
-		progress_mat.albedo_color = Color.DODGER_BLUE
-		#progress_mat.emissive = Color.DODGER_BLUE
-	elif capture_progress < 0: # Bravo is capturing
-		progress_mat.albedo_color = Color.RED
-		#progress_mat.emissive = Color.RED
+
+	# Progress circle (never scale to exactly 0, it creates a singular transform)
+	var progress_pct = capture_progress / 100.0
+	progress_circle.scale = Vector3(max(progress_pct, 0.001), 1.0, max(progress_pct, 0.001))
+	if capture_progress > 0.0:
+		progress_mat.albedo_color = GameManager.get_team_color(GameManager.attacking_team)
 	else:
 		progress_mat.albedo_color = Color.WHITE
-		#progress_mat.emissive = Color.WHITE
-		
-	# --- Update Text ---
-	if is_contested:
-		status_label.text = "Point %s\n[CONTESTED]" % point_name
-		return
 
-	var team_name = "Neutral"
-	if controlling_team == 0:
-		team_name = "Alpha"
-	elif controlling_team == 1:
-		team_name = "Bravo"
-	
-	var progress_display = int(abs(capture_progress))
-	status_label.text = "Point %s [%s]\n%d%%" % [point_name, team_name, progress_display]
+	# Text
+	if is_captured:
+		status_label.text = "Point %s\n[CAPTURED]" % point_name
+	elif not is_active:
+		status_label.text = "Point %s\n[LOCKED]" % point_name
+	elif is_contested:
+		status_label.text = "Point %s\n[CONTESTED]" % point_name
+	else:
+		status_label.text = "Point %s\n%d%%" % [point_name, int(capture_progress)]
 
 func update_visuals():
 	if not mesh_instance:
 		return
 	var mat = StandardMaterial3D.new()
-	
-	# Turn Yellow if contested, otherwise revert to normal team colors
-	if is_contested:
+
+	if is_captured:
+		mat.albedo_color = GameManager.get_team_color(controlling_team)
+	elif is_contested:
 		mat.albedo_color = Color.YELLOW
-	elif controlling_team == 0:
-		mat.albedo_color = Color.DODGER_BLUE
-	elif controlling_team == 1:
-		mat.albedo_color = Color.RED
+	elif is_active:
+		mat.albedo_color = Color.WHITE
 	else:
-		if is_active:
-			mat.albedo_color = Color.WHITE
-		else:
-			mat.albedo_color = Color.DIM_GRAY # Grayed out if locked and neutral
-		
+		mat.albedo_color = Color.DIM_GRAY # Locked
+
 	mat.roughness = 0.8
 	mesh_instance.material_override = mat
-	
+
 func get_random_point_inside() -> Vector3:
-	# If we don't have a collision shape, just return the center
 	if not collision_shape or not collision_shape.shape:
 		return global_position
-		
+
 	var shape = collision_shape.shape
-	
-	# Check if it's a Cylinder (which we used for the capture point)
 	if shape is CylinderShape3D:
-		var radius = shape.radius
-		# Pick a random angle (0 to 360 degrees / 0 to TAU radians)
 		var angle = randf() * TAU
-		# Pick a random distance from the center. 
-		# We use sqrt(randf()) to ensure they spread out evenly across the circle, 
-		# instead of clumping heavily in the very middle.
-		var distance = sqrt(randf()) * radius
-		
-		# Calculate the X and Z offset
-		var offset_x = cos(angle) * distance
-		var offset_z = sin(angle) * distance
-		
-		return global_position + Vector3(offset_x, 0, offset_z)
-		
-	# Fallback if the shape isn't a cylinder
+		var distance = sqrt(randf()) * shape.radius
+		return global_position + Vector3(cos(angle) * distance, 0, sin(angle) * distance)
+
 	return global_position

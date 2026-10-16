@@ -4,21 +4,17 @@ func _ready():
 	HUD.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	$VBoxContainer/HBoxContainer/PlayAgainButton.grab_focus()
-	# Check who won via the GameManager autoload
-	if GameManager.team_alpha_score >= GameManager.score_to_win:
-		$VBoxContainer/ResultLabel.text = "PRIMAL APES WIN!"
-		$VBoxContainer/ResultLabel.add_theme_color_override("font_color", Color.DODGER_BLUE)
+
+	var winner = GameManager.winning_team
+	var label = $VBoxContainer/ResultLabel
+	if winner == GameManager.TEAM_NONE:
+		label.text = "MATCH OVER"
 	else:
-		$VBoxContainer/ResultLabel.text = "CHROME LEGION WINS!"
-		$VBoxContainer/ResultLabel.add_theme_color_override("font_color", Color.RED)
+		label.text = "%s WIN!" % GameManager.get_team_name(winner)
+		label.add_theme_color_override("font_color", GameManager.get_team_color(winner))
 
 func _on_play_again_pressed():
-	# Reset scores and go back to class select
-	GameManager.team_alpha_score = 0
-	GameManager.team_bravo_score = 0
 	get_tree().change_scene_to_file("res://class_select.tscn")
 
 func _on_main_menu_pressed():
-	GameManager.team_alpha_score = 0
-	GameManager.team_bravo_score = 0
 	get_tree().change_scene_to_file("res://main_menu.tscn")

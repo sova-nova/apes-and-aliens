@@ -14,6 +14,8 @@ var _attack_timer: float = 0.0
 var _knockback_velocity: Vector3 = Vector3.ZERO
 var is_vulnerable: bool = false
 
+var _repath_timer: float = randf() # Randomized so bots don't all repath on the same frame
+
 var health_bar_pivot: Node3D
 var health_bar_mesh: MeshInstance3D
 var health_bar_mat: StandardMaterial3D
@@ -256,7 +258,9 @@ func _physics_process(delta: float):
 	# --- PATHFINDING MOVEMENT ---
 	# OPTIMIZATION: Only update the NavAgent's target if the destination actually moved > 1 meter.
 	# This stops the agent from restarting its path calculation every single frame.
-	if nav_agent.target_position.distance_to(target_destination) > 1.0:
+	_repath_timer -= delta
+	if _repath_timer <= 0.0 or nav_agent.target_position.distance_to(target_destination) > 1.0:
+		_repath_timer = 1.0
 		nav_agent.target_position = target_destination
 		
 	if not nav_agent.is_navigation_finished():

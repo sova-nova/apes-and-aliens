@@ -3,8 +3,8 @@ extends Control
 @onready var health_bar: ProgressBar = $MarginContainer/HBoxContainer/HealthBar
 @onready var health_label: Label = $MarginContainer/HBoxContainer/HealthLabel
 @onready var crosshair: Label = $CenterContainer/Crosshair
-@onready var alpha_score_label: Label = $VBoxContainer/HBoxContainer/AlphaScore
-@onready var bravo_score_label: Label = $VBoxContainer/HBoxContainer/BravoScore
+@onready var points_label: Label = $VBoxContainer/HBoxContainer/AlphaScore
+@onready var role_label: Label = $VBoxContainer/HBoxContainer/BravoScore
 @onready var ability_label: Label = $MarginContainer2/AbilityLabel
 @onready var objective_label: Label = $ObjectiveLabel
 @onready var class_label: Label = $ClassLabel
@@ -135,11 +135,17 @@ func _on_health_changed(new_health: float, max_health: float):
 		else:
 			vignette_rect.color.a = 0.0 # Fully transparent
 
-func _on_score_updated(alpha_score: int, bravo_score: int):
-	if alpha_score_label:
-		alpha_score_label.text = "Alpha: %d" % alpha_score
-	if bravo_score_label:
-		bravo_score_label.text = "Bravo: %d" % bravo_score
+func _on_score_updated(points_captured: int, total_points: int):
+	if points_label:
+		points_label.text = "Points: %d/%d" % [points_captured, total_points]
+	_update_role_label()
+	
+func _update_role_label():
+	if not role_label:
+		return
+	var is_attacker = PlayerSetup.selected_faction == GameManager.attacking_team
+	role_label.text = "ATTACKING" if is_attacker else "DEFENDING"
+	role_label.add_theme_color_override("font_color", GameManager.get_team_color(PlayerSetup.selected_faction))
 
 func _find_player() -> CharacterBody3D:
 	var players = get_tree().get_nodes_in_group("players")
@@ -180,9 +186,13 @@ func _on_ability_status_changed(slot: int, is_ready: bool, time_left: float):
 		ability_label.add_theme_color_override("font_color", Color.WHITE)
 		
 func _on_objective_updated(active_point_order: int):
-	if objective_label:
-		var point_letter = char(65 + active_point_order) # 0=A, 1=B, 2=C
+	if not objective_label:
+		return
+	var point_letter = char(65 + active_point_order) # 0=A, 1=B, 2=C
+	if PlayerSetup.selected_faction == GameManager.attacking_team:
 		objective_label.text = "Objective: Capture Point %s" % point_letter
+	else:
+		objective_label.text = "Objective: Defend Point %s" % point_letter
 		
 func _on_class_changed(new_class_name: String):
 	if class_label:
