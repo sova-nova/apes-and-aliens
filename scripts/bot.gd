@@ -83,8 +83,8 @@ func _ready():
 	
 	health_bar_mat = StandardMaterial3D.new()
 	health_bar_mat.albedo_color = Color.GREEN
-	health_bar_mat.emissive = Color.GREEN
-	health_bar_mat.emissive_energy = 1.0
+	#health_bar_mat.emissive = Color.GREEN
+	#health_bar_mat.emissive_energy = 1.0
 	health_bar_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	health_bar_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED # Ignore sun
 	health_bar_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # Visible from both sides
@@ -152,13 +152,13 @@ func update_health_bar():
 	# 3. Change color based on health percentage
 	if health_pct > 0.6:
 		health_bar_mat.albedo_color = Color.GREEN
-		health_bar_mat.emissive = Color.GREEN
+		#health_bar_mat.emissive = Color.GREEN
 	elif health_pct > 0.3:
 		health_bar_mat.albedo_color = Color.YELLOW
-		health_bar_mat.emissive = Color.YELLOW
+		#health_bar_mat.emissive = Color.YELLOW
 	else:
 		health_bar_mat.albedo_color = Color.RED
-		health_bar_mat.emissive = Color.RED
+		#health_bar_mat.emissive = Color.RED
 	
 func set_vulnerable(state: bool):
 	is_vulnerable = state
@@ -491,8 +491,8 @@ func _flash_ability_color(color: Color):
 	if not mesh_instance: return
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = color
-	mat.emissive = color
-	mat.emissive_energy = 2.0
+	#mat.emissive = color
+	#mat.emissive_energy = 2.0
 	mesh_instance.material_override = mat
 
 func _spawn_bot_tracer(from: Vector3, to: Vector3):
@@ -504,8 +504,8 @@ func _spawn_bot_tracer(from: Vector3, to: Vector3):
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color.RED
-	mat.emissive = Color.RED
-	mat.emissive_energy = 4.0
+	#mat.emissive = Color.RED
+	#mat.emissive_energy = 4.0
 	tracer.material_override = mat
 
 	get_tree().root.add_child(tracer)
@@ -552,8 +552,8 @@ func _spawn_death_debris():
 			box_mesh.size = Vector3(0.1, 0.1, 0.2) # Flat metal scraps
 			box_shape.size = Vector3(0.1, 0.1, 0.2)
 			mat.albedo_color = Color.LIGHT_GRAY
-			mat.emissive = Color.CYAN
-			mat.emissive_energy = 0.5
+			#mat.emissive = Color.CYAN
+			#mat.emissive_energy = 0.5
 			
 		mesh_inst.mesh = box_mesh
 		mesh_inst.material_override = mat

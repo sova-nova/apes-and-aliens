@@ -18,6 +18,10 @@ func _ready():
 func _spawn_player():
 	var player = player_scene.instantiate()
 	
+	# 1. ADD TO TREE FIRST! (So _ready() runs and Godot knows they exist)
+	add_child(player)
+	
+	# 2. NOW SET POSITION & ROTATION!
 	var spawn_group = "team_alpha_spawns" if PlayerSetup.selected_faction == 0 else "team_bravo_spawns"
 	var spawns = get_tree().get_nodes_in_group(spawn_group)
 	
@@ -30,18 +34,13 @@ func _spawn_player():
 	else:
 		player.global_position = Vector3(0, 1.25, 0) 
 		
-	# Add the player to the tree FIRST so _ready() runs and captures the mouse
-	add_child(player)
-	
 	# --- FACE THE BATTLEFIELD ---
-	# Now that the player is in the tree, apply the rotation
 	if GameManager and GameManager.active_capture_point:
 		var target_pos = GameManager.active_capture_point.global_position
 		var direction = target_pos - player.global_position
-		direction.y = 0.0 # Ignore vertical differences
+		direction.y = 0.0 
 		
 		if direction.length_squared() > 0.01:
-			# Look at the capture point
 			var target_transform = Transform3D().looking_at(direction, Vector3.UP)
 			player.rotation.y = target_transform.basis.get_euler().y
 			

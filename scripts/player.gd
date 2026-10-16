@@ -371,8 +371,8 @@ func _spawn_tracer(from: Vector3, to: Vector3):
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(1.0, 0.85, 0.3)
-	mat.emissive = Color(1.0, 0.6, 0.1)
-	mat.emissive_energy = 4.0
+	#mat.emissive = Color(1.0, 0.6, 0.1)
+	#mat.emissive_energy = 4.0
 	tracer.material_override = mat
 
 	get_tree().root.add_child(tracer)
@@ -391,8 +391,8 @@ func _spawn_hit_effect(pos: Vector3, normal: Vector3):
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(1.0, 0.5, 0.1)
-	mat.emissive = Color(1.0, 0.3, 0.0)
-	mat.emissive_energy = 4.0
+	#mat.emissive = Color(1.0, 0.3, 0.0)
+	#mat.emissive_energy = 4.0
 	spark.material_override = mat
 
 	spark.global_position = pos + normal * 0.02
@@ -505,7 +505,7 @@ func _phase_dash():
 	var ghost_mat = StandardMaterial3D.new()
 	ghost_mat.albedo_color = Color(1, 1, 1, 0.3) # 30% opacity
 	ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	ghost_mat.emissive = Color(0.5, 0.5, 1.0) # Add a slight blue glow
+	#ghost_mat.emissive = Color(0.5, 0.5, 1.0) # Add a slight blue glow
 	$MeshInstance3D.material_override = ghost_mat
 	
 	# We use a one-shot timer to reset the visual, independent of the physics timer
@@ -521,8 +521,8 @@ func _overcharge():
 	if gun_model:
 		var overcharge_mat = StandardMaterial3D.new()
 		overcharge_mat.albedo_color = Color.ORANGE_RED
-		overcharge_mat.emissive = Color.RED
-		overcharge_mat.emissive_energy = 2.0
+		#overcharge_mat.emissive = Color.RED
+		#overcharge_mat.emissive_energy = 2.0
 		gun_model.material_override = overcharge_mat
 		
 	# End the effect after 4 seconds
@@ -553,8 +553,8 @@ func _adrenaline_spike():
 	# 4. Visual: Brief yellow flash on the player to indicate the sacrifice
 	var flash_mat = StandardMaterial3D.new()
 	flash_mat.albedo_color = Color.YELLOW
-	flash_mat.emissive = Color.YELLOW
-	flash_mat.emissive_energy = 4.0
+	#flash_mat.emissive = Color.YELLOW
+	#flash_mat.emissive_energy = 4.0
 	$MeshInstance3D.material_override = flash_mat
 	
 	get_tree().create_timer(0.15).timeout.connect(func():
@@ -597,8 +597,8 @@ func _deploy_cover():
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.2, 0.6, 1.0, 0.5) # Semi-transparent blue
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.emissive = Color(0.1, 0.3, 0.8)
-	mat.emissive_energy = 0.5
+	#mat.emissive = Color(0.1, 0.3, 0.8)
+	#mat.emissive_energy = 0.5
 	mesh_inst.material_override = mat
 	
 	wall.add_child(col)
@@ -646,8 +646,8 @@ func _bulwark_ability():
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.2, 0.6, 1.0, 0.15) # Very transparent blue
-	mat.emissive = Color(0.2, 0.5, 1.0)
-	mat.emissive_energy = 1.5
+	#mat.emissive = Color(0.2, 0.5, 1.0)
+	#mat.emissive_energy = 1.5
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED # So we can see the inside of the sphere
 	aura.material_override = mat
@@ -695,8 +695,8 @@ func _shockwave():
 	
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color.RED
-	mat.emissive = Color.RED
-	mat.emissive_energy = 4.0
+	#mat.emissive = Color.RED
+	#mat.emissive_energy = 4.0
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ring.material_override = mat
 	
@@ -723,8 +723,8 @@ func _grapple_hook():
 	# Visual: Make the player flash cyan while flying
 	var grapple_mat = StandardMaterial3D.new()
 	grapple_mat.albedo_color = Color.CYAN
-	grapple_mat.emissive = Color.CYAN
-	grapple_mat.emissive_energy = 2.0
+	#grapple_mat.emissive = Color.CYAN
+	#grapple_mat.emissive_energy = 2.0
 	$MeshInstance3D.material_override = grapple_mat
 	
 	get_tree().create_timer(0.4).timeout.connect(func():
@@ -771,8 +771,8 @@ func _life_siphon():
 	# Visuals: Turn the player purple to indicate siphoning
 	var siphon_mat = StandardMaterial3D.new()
 	siphon_mat.albedo_color = Color.MEDIUM_PURPLE
-	siphon_mat.emissive = Color.PURPLE
-	siphon_mat.emissive_energy = 2.0
+	#siphon_mat.emissive = Color.PURPLE
+	#siphon_mat.emissive_energy = 2.0
 	$MeshInstance3D.material_override = siphon_mat
 	
 	# Visuals: Put a purple light on the enemy so you know who is tethered
@@ -851,8 +851,8 @@ func _respawn():
 	var shield_mat = StandardMaterial3D.new()
 	shield_mat.albedo_color = Color(1, 1, 1, 0.5) # Semi-transparent
 	shield_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	shield_mat.emissive = Color.CYAN # Glowing cyan shield
-	shield_mat.emissive_energy = 2.0
+	#shield_mat.emissive = Color.CYAN # Glowing cyan shield
+	#shield_mat.emissive_energy = 2.0
 	$MeshInstance3D.material_override = shield_mat
 	
 	# Remove shield after 2 seconds

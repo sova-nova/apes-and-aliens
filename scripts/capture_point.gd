@@ -32,8 +32,8 @@ func _ready():
 	progress_mat = StandardMaterial3D.new()
 	progress_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	progress_mat.albedo_color = Color.WHITE
-	progress_mat.emissive = Color.WHITE
-	progress_mat.emissive_energy = 1.0
+	#progress_mat.emissive = Color.WHITE
+	#progress_mat.emissive_energy = 1.0
 	progress_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # See it from below too
 	progress_circle.material_override = progress_mat
 	
@@ -123,13 +123,13 @@ func update_ui():
 	
 	if capture_progress > 0: # Alpha is capturing
 		progress_mat.albedo_color = Color.DODGER_BLUE
-		progress_mat.emissive = Color.DODGER_BLUE
+		#progress_mat.emissive = Color.DODGER_BLUE
 	elif capture_progress < 0: # Bravo is capturing
 		progress_mat.albedo_color = Color.RED
-		progress_mat.emissive = Color.RED
+		#progress_mat.emissive = Color.RED
 	else:
 		progress_mat.albedo_color = Color.WHITE
-		progress_mat.emissive = Color.WHITE
+		#progress_mat.emissive = Color.WHITE
 		
 	# --- Update Text ---
 	if is_contested:

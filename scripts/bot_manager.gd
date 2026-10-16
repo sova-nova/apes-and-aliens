@@ -53,10 +53,12 @@ func _spawn_bot(team: int):
 	if bot_classes.size() > 0:
 		new_bot.character_class = bot_classes.pick_random()
 		
+	# 1. ADD TO TREE FIRST!
+	get_tree().current_scene.add_child(new_bot)
+	
+	# 2. NOW SET THE POSITION!
 	# Position the bot randomly inside the spawn area
 	if spawn_point.has_method("get_random_point_inside"):
 		new_bot.global_position = spawn_point.get_random_point_inside()
 	else:
 		new_bot.global_position = spawn_point.global_position
-		
-	get_tree().current_scene.add_child(new_bot)
