@@ -5,6 +5,7 @@ var player_scene = preload("res://player.tscn")
 
 func _ready():
 	HUD.visible = true
+	_add_pause_menu()
 	
 	# 1. Find the capture points so the player knows where to look
 	await GameManager.initialize_level()
@@ -41,3 +42,11 @@ func _spawn_player():
 	# Ensure the camera is looking straight ahead, not tilted up/down
 	if player.has_node("CameraPivot"):
 		player.get_node("CameraPivot").rotation.x = 0.0
+
+# The pause menu lives on its own canvas layer so it draws above the HUD
+func _add_pause_menu():
+	var layer = CanvasLayer.new()
+	layer.layer = 100
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(layer)
+	layer.add_child(PauseMenu.new())

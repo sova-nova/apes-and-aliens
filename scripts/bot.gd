@@ -320,7 +320,7 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 			# costs a short random "spotting" time before the first shot.
 			_disengaged_time = 0.0
 			if not _is_valid_target(_engaged_target):
-				_reaction_left = randf_range(reaction_min, reaction_max)
+				_reaction_left = randf_range(reaction_min, reaction_max) * GameSettings.bot_reaction_mult(faction)
 			_engaged_target = combat_target
 			if _reaction_left > 0.0:
 				_reaction_left -= delta
@@ -551,7 +551,7 @@ func _can_see(target) -> bool:
 ## Current aim error (std-dev, degrees). Gets worse right after the bot is hit.
 func _current_spread_degrees() -> float:
 	var flinch = clampf(1.0 - _since_damage / maxf(flinch_duration, 0.01), 0.0, 1.0)
-	return aim_spread_degrees * (1.0 + (flinch_spread_multiplier - 1.0) * flinch)
+	return aim_spread_degrees * GameSettings.bot_spread_mult(faction) * (1.0 + (flinch_spread_multiplier - 1.0) * flinch)
 
 ## Deflects a direction by a random gaussian error on two axes.
 ## The miss DISTANCE grows with range automatically, since the error is angular.
@@ -592,7 +592,7 @@ func _attack(target: Node3D):
 		var hit = result.collider
 		if hit.has_method("take_damage") and "faction" in hit and hit.faction != faction and _is_valid_target(hit):
 			var my_name = character_class.class_name_str if character_class else "Bot"
-			var damage = attack_damage * _damage_multiplier
+			var damage = attack_damage * _damage_multiplier * GameSettings.bot_damage_mult(faction)
 			if hit == _locked_target:
 				damage *= 1.3 # Target Lock bonus, same as the player's version
 			hit.take_damage(damage, faction, my_name)

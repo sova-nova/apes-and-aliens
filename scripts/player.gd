@@ -92,6 +92,7 @@ func _ready():
 	health_component.health_changed.connect(_on_health_changed)
 	health_component.died.connect(_on_health_died)
 
+	GameSettings.ensure_loaded() # So sensitivity and volume are right even if we skipped the menu
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	aim_ray.add_exception(self)
 	add_to_group("players")
@@ -132,16 +133,12 @@ func apply_class():
 	health_changed.emit(health_component.current_health, health_component.max_health)
 
 func _unhandled_input(event: InputEvent):
+	# Esc is handled by the PauseMenu, which also frees the mouse
 	if event is InputEventMouseMotion:
-		rotate_y(-event.relative.x * mouse_sensitivity)
-		camera_pivot.rotate_x(-event.relative.y * mouse_sensitivity)
+		var sensitivity = mouse_sensitivity * GameSettings.mouse_sensitivity_scale
+		rotate_y(-event.relative.x * sensitivity)
+		camera_pivot.rotate_x(-event.relative.y * sensitivity)
 		camera_pivot.rotation.x = clamp(camera_pivot.rotation.x, -1.2, 1.2)
-
-	if event.is_action_pressed("ui_cancel"):
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		else:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			
 func _apply_screen_shake(amount: float = 0.05):
 	var tween = create_tween()
@@ -545,7 +542,7 @@ func _phase_dash():
 	$MeshInstance3D.material_override = ghost_mat
 	
 	# We use a one-shot timer to reset the visual, independent of the physics timer
-	get_tree().create_timer(0.25).timeout.connect(func():
+	get_tree().create_timer(0.25, false).timeout.connect(func():
 		if is_instance_valid(self) and is_node_ready():
 			$MeshInstance3D.material_override = null
 	)
@@ -560,7 +557,7 @@ func _overcharge():
 		gun_model.material_override = overcharge_mat
 		
 	# End the effect after 4 seconds
-	get_tree().create_timer(4.0).timeout.connect(_end_overcharge)
+	get_tree().create_timer(4.0, false).timeout.connect(_end_overcharge)
 
 func _end_overcharge():
 	if is_instance_valid(self) and is_node_ready():
@@ -588,7 +585,7 @@ func _adrenaline_spike():
 	flash_mat.albedo_color = Color.YELLOW
 	$MeshInstance3D.material_override = flash_mat
 	
-	get_tree().create_timer(0.15).timeout.connect(func():
+	get_tree().create_timer(0.15, false).timeout.connect(func():
 		if is_instance_valid(self) and is_node_ready():
 			$MeshInstance3D.material_override = null
 	)
@@ -652,7 +649,7 @@ func _deploy_cover():
 	aim_ray.add_exception(wall)
 	
 	# 7. Wall destroys itself after 6 seconds
-	wall.get_tree().create_timer(6.0).timeout.connect(func():
+	wall.get_tree().create_timer(6.0, false).timeout.connect(func():
 		if is_instance_valid(wall):
 			# Clean up the exception just to be tidy, though queue_free handles it mostly
 			if is_instance_valid(self) and aim_ray:
@@ -683,7 +680,7 @@ func _bulwark_ability():
 	add_child(aura)
 
 	# End the effect after 4 seconds
-	get_tree().create_timer(4.0).timeout.connect(func():
+	get_tree().create_timer(4.0, false).timeout.connect(func():
 		if is_instance_valid(aura):
 			aura.queue_free()
 		if is_instance_valid(self):
@@ -749,7 +746,7 @@ func _grapple_hook():
 	grapple_mat.albedo_color = Color.CYAN
 	$MeshInstance3D.material_override = grapple_mat
 	
-	get_tree().create_timer(0.4).timeout.connect(func():
+	get_tree().create_timer(0.4, false).timeout.connect(func():
 		if is_instance_valid(self) and is_node_ready():
 			$MeshInstance3D.material_override = null
 	)
@@ -843,7 +840,7 @@ func _handle_death():
 	
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
-	await get_tree().create_timer(3.0).timeout
+	await get_tree().create_timer(3.0, false).timeout
 	_respawn()
 
 func _respawn():
@@ -879,7 +876,7 @@ func _respawn():
 	$MeshInstance3D.material_override = shield_mat
 	
 	# Remove shield after 2 seconds
-	get_tree().create_timer(2.0).timeout.connect(func():
+	get_tree().create_timer(2.0, false).timeout.connect(func():
 		if is_instance_valid(self) and is_node_ready():
 			_spawn_protected = false
 			if not _is_dashing and not _is_siphoning: # Don't override other ability visuals

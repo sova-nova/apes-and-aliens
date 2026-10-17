@@ -5,14 +5,17 @@
 [resource]
 script = ExtResource("1_c2d3r")
 class_name_str = "Ghost"
-max_health = 75.0
+max_health = 90.0
 move_speed = 6.0
 gun_damage = 80.0
-fire_rate = 1.0
+fire_rate = 0.9
 gun_range = 200.0
 ability_1_type = 7
 ability_2_type = 8
 ability_2_cooldown = 11.0
 ability_3_type = 9
 ability_3_cooldown = 12.0
+bot_spread_degrees = 1.6
+bot_reaction_min = 0.6
+bot_reaction_max = 0.9
 metadata/_custom_type_script = "uid://vbls7s42ixmg"

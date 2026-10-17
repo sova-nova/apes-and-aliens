@@ -5,10 +5,14 @@
 [resource]
 script = ExtResource("1_gbe78")
 class_name_str = "Breacher"
+max_health = 115.0
+gun_damage = 24.0
+fire_rate = 0.13
 ability_1_type = 1
 ability_1_cooldown = 7.0
 ability_2_type = 2
 ability_2_cooldown = 12.0
 ability_3_type = 3
 ability_3_cooldown = 10.0
+bot_spread_degrees = 2.2
 metadata/_custom_type_script = "uid://vbls7s42ixmg"

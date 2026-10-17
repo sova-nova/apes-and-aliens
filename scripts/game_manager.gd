@@ -34,6 +34,11 @@ var time_bonus_per_capture: float = 60.0
 var is_match_playing: bool = false
 var is_overtime: bool = false
 
+# Bumped when a match starts or is aborted. Countdown and end-of-match timers remember the
+# value they started with, so a stale one can't start or end a match that has since been
+# restarted or quit.
+var _match_run_id: int = 0
+
 # ─── Teams ──────────────────────────────────────────────────
 func get_team_name(team: int) -> String:
 	match team:
@@ -134,6 +139,7 @@ func _check_overtime():
 		_end_match(defending_team)
 
 func initialize_level():
+	_match_run_id += 1
 	points_captured = 0 # Fresh score every match
 	current_point_index = 0
 	capture_points.clear()
@@ -166,16 +172,28 @@ func initialize_level():
 	match_timer_updated.emit(match_time_left) # Show the full time during the countdown
 
 func start_match_countdown():
+	var run_id = _match_run_id
 	match_state_changed.emit("3")
-	await get_tree().create_timer(1.0).timeout
+	await get_tree().create_timer(1.0, false).timeout
+	if run_id != _match_run_id: return
 	match_state_changed.emit("2")
-	await get_tree().create_timer(1.0).timeout
+	await get_tree().create_timer(1.0, false).timeout
+	if run_id != _match_run_id: return
 	match_state_changed.emit("1")
-	await get_tree().create_timer(1.0).timeout
+	await get_tree().create_timer(1.0, false).timeout
+	if run_id != _match_run_id: return
 	match_state_changed.emit("GO!")
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(0.5, false).timeout
+	if run_id != _match_run_id: return
 	match_state_changed.emit("PLAYING")
 	is_match_playing = true
+
+## Stops the current match without scoring it (used by the pause menu's Restart and Quit).
+func abort_match():
+	_match_run_id += 1
+	is_match_playing = false
+	is_overtime = false
+	is_match_over = true # Nothing should end or score a match from the menus
 
 # Only the attacking team can capture, so `team` is always attacking_team.
 func _on_point_captured(team: int):
@@ -219,5 +237,8 @@ func _end_match(winner: int):
 
 	game_won.emit(winner)
 
-	await get_tree().create_timer(2.0).timeout
+	var run_id = _match_run_id
+	await get_tree().create_timer(2.0, false).timeout
+	if run_id != _match_run_id:
+		return # The match was aborted or restarted in the meantime
 	get_tree().change_scene_to_file("res://round_end.tscn")

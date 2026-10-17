@@ -99,7 +99,7 @@ func _on_kill_occurred(killer_name: String, victim_name: String, victim_faction:
 	kill_feed_vbox.add_child(label)
 	
 	# Fade out and delete after 4 seconds
-	await get_tree().create_timer(4.0).timeout
+	await get_tree().create_timer(4.0, false).timeout
 	if is_instance_valid(label):
 		var tween = label.create_tween()
 		tween.tween_property(label, "modulate:a", 0.0, 1.0)

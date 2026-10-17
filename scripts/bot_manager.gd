@@ -29,8 +29,15 @@ func _try_spawn_team(team: int):
 			current_bots += 1
 			
 	# If we haven't hit the limit, spawn a new one
-	if current_bots < max_bots_per_team:
+	if current_bots < _bot_limit(team):
 		_spawn_bot(team)
+
+## Enemy teams get more or fewer bots depending on difficulty; the player's own team never changes.
+func _bot_limit(team: int) -> int:
+	var limit = max_bots_per_team
+	if team != PlayerSetup.selected_faction:
+		limit += GameSettings.enemy_bot_adjust()
+	return maxi(1, limit)
 
 func _spawn_bot(team: int):
 	if not enemy_scene:
