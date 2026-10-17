@@ -1,7 +1,8 @@
 name: Export builds
 
 # Runs when you push a version tag such as v0.1.0, or by hand from the Actions tab.
-# It exports Windows and Linux builds, zips them, and (for tags) drafts a GitHub Release.
+# It exports Windows and Linux builds and zips them. The GitHub Release is drafted ONLY when
+# the run was started by pushing a tag (a manual "Run workflow" just produces the downloadable builds).
 on:
   push:
     tags:
@@ -11,13 +12,13 @@ on:
 jobs:
   export:
     name: Export ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
       image: barichello/godot-ci:${{ matrix.godot_version }}
     strategy:
       fail-fast: false
       matrix:
-        # MUST match the editor you build with: Help > About in Godot (for example 4.5 or 4.5.1).
+        # MUST match the editor you build with: Help > About in Godot.
         godot_version: ["4.5.1"]
         target: [windows, linux]
         include:
@@ -29,7 +30,7 @@ jobs:
             output: build/linux/ApesVsAliens.x86_64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Put the export templates where Godot looks for them
         env:
@@ -60,7 +61,7 @@ jobs:
           fi
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ApesVsAliens-${{ matrix.target }}
           path: dist/*
@@ -69,19 +70,19 @@ jobs:
     name: Draft GitHub Release
     needs: export
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - name: Download both builds
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
 
       # A draft, so you can look it over (and test the downloads) before publishing
       - name: Create the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           draft: true
