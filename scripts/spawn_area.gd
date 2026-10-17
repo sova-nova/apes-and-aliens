@@ -1,6 +1,29 @@
 extends Area3D
 
+## Spawn areas work like ForwardSpawn markers (keyed by ROLE, not faction).
+## true = used by whichever team is currently ATTACKING; false = by the DEFENDING team.
+@export var for_attackers: bool = true
+## Used while GameManager.current_point_index equals this (0 = Point A).
+@export var for_active_point: int = 0
+## If true, used only when no marker/area matches the current point exactly.
+@export var is_fallback: bool = false
+
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
+
+func _ready():
+	# Back-compat: areas still in the old faction groups map to roles automatically.
+	# Alpha's base is the attackers' home and Bravo's is the defenders' home.
+	# Remove the old group from an area if you want to set its role in the Inspector instead.
+	if is_in_group("team_alpha_spawns"):
+		for_attackers = true
+		is_fallback = true
+	elif is_in_group("team_bravo_spawns"):
+		for_attackers = false
+		is_fallback = true
+	add_to_group("spawn_points")
+
+func get_spawn_position() -> Vector3:
+	return get_random_point_inside()
 
 func get_random_point_inside() -> Vector3:
 	if not collision_shape or not collision_shape.shape:

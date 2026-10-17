@@ -37,13 +37,10 @@ func _spawn_bot(team: int):
 		print("Bot Manager: Bot scene is missing!")
 		return
 		
-	var spawn_group = "team_alpha_spawns" if team == 0 else "team_bravo_spawns"
-	var spawns = get_tree().get_nodes_in_group(spawn_group)
-	
-	if spawns.size() == 0:
-		return 
-		
-	var spawn_point = spawns.pick_random()
+	# Ask GameManager where this team spawns right now (INF = no spawns in this scene, e.g. menus)
+	var spawn_pos = GameManager.get_spawn_position(team)
+	if not spawn_pos.is_finite():
+		return
 	
 	var new_bot = enemy_scene.instantiate()
 	new_bot.faction = team
@@ -57,8 +54,4 @@ func _spawn_bot(team: int):
 	get_tree().current_scene.add_child(new_bot)
 	
 	# 2. NOW SET THE POSITION!
-	# Position the bot randomly inside the spawn area
-	if spawn_point.has_method("get_random_point_inside"):
-		new_bot.global_position = spawn_point.get_random_point_inside()
-	else:
-		new_bot.global_position = spawn_point.global_position
+	new_bot.global_position = spawn_pos

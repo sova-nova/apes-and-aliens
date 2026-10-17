@@ -22,17 +22,8 @@ func _spawn_player():
 	add_child(player)
 	
 	# 2. NOW SET POSITION & ROTATION!
-	var spawn_group = "team_alpha_spawns" if PlayerSetup.selected_faction == 0 else "team_bravo_spawns"
-	var spawns = get_tree().get_nodes_in_group(spawn_group)
-	
-	if spawns.size() > 0:
-		var chosen_spawn = spawns.pick_random()
-		if chosen_spawn.has_method("get_random_point_inside"):
-			player.global_position = chosen_spawn.get_random_point_inside()
-		else:
-			player.global_position = chosen_spawn.global_position
-	else:
-		player.global_position = Vector3(0, 1.25, 0) 
+	var spawn_pos = GameManager.get_spawn_position(PlayerSetup.selected_faction)
+	player.global_position = spawn_pos if spawn_pos.is_finite() else Vector3(0, 1.25, 0)
 		
 	# --- FACE THE BATTLEFIELD ---
 	if GameManager and GameManager.active_capture_point:

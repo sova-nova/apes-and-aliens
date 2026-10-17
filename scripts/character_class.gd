@@ -36,3 +36,11 @@ enum AbilityType {
 # Ability 3 (Shift)
 @export var ability_3_type: AbilityType = AbilityType.NONE
 @export var ability_3_cooldown: float = 15.0
+
+# Bot AI tuning (the player ignores these)
+@export_group("Bot Aim")
+## Standard deviation of the bot's aim error, in degrees. Lower = more accurate.
+@export var bot_spread_degrees: float = 2.0
+## A bot that newly spots an enemy waits a random time in this range before its first shot.
+@export var bot_reaction_min: float = 0.3
+@export var bot_reaction_max: float = 0.5

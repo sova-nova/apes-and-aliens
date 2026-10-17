@@ -395,8 +395,8 @@ func _spawn_hit_effect(pos: Vector3, normal: Vector3):
 	#mat.emissive_energy = 4.0
 	spark.material_override = mat
 
-	spark.global_position = pos + normal * 0.02
 	get_tree().root.add_child(spark)
+	spark.global_position = pos + normal * 0.02
 	await get_tree().create_timer(0.12).timeout
 	spark.queue_free()
 
@@ -603,7 +603,8 @@ func _deploy_cover():
 	
 	wall.add_child(col)
 	wall.add_child(mesh_inst)
-	
+	get_tree().root.add_child(wall) # Add to the tree BEFORE setting global_position
+
 	# 4. Position it so the bottom touches the floor
 	wall.global_position = target_position + Vector3.UP * (wall_height / 2.0)
 	
@@ -617,8 +618,6 @@ func _deploy_cover():
 		wall.rotation.y = atan2(cam_right.x, cam_right.z)
 	else:
 		wall.rotation.y = global_rotation.y # Fallback if looking straight up/down
-	
-	get_tree().root.add_child(wall)
 	
 	# 6. CRITICAL: Make the player's aim ray ignore the wall so we can shoot through it!
 	aim_ray.add_exception(wall)
@@ -700,9 +699,9 @@ func _shockwave():
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ring.material_override = mat
 	
-	ring.global_position = global_position
 	ring.rotation.x = PI / 2 # Lay flat
 	get_tree().root.add_child(ring)
+	ring.global_position = global_position
 	
 	var tween = ring.create_tween().set_parallel(true)
 	tween.tween_property(mesh, "top_radius", 5.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -833,16 +832,16 @@ func _respawn():
 	visible = true
 	process_mode = Node.PROCESS_MODE_INHERIT
 	
-	# Find the correct spawn point group based on faction
-	var spawn_group = "team_alpha_spawns" if faction == 0 else "team_bravo_spawns"
-	var spawns = get_tree().get_nodes_in_group(spawn_group)
-	
-	if spawns.size() > 0:
-		# Pick a random spawn point from the group
-		global_position = spawns.pick_random().global_position
-	else:
-		# Fallback if no spawn points exist
-		global_position = Vector3(0, 1.25, 0)
+	# Ask GameManager where we spawn right now (follows capture progress)
+	var spawn_pos = GameManager.get_spawn_position(faction)
+	global_position = spawn_pos if spawn_pos.is_finite() else Vector3(0, 1.25, 0)
+
+	# Face the objective, since forward spawns can put us anywhere
+	if GameManager.active_capture_point:
+		var dir = GameManager.active_capture_point.global_position - global_position
+		dir.y = 0.0
+		if dir.length_squared() > 0.01:
+			rotation.y = atan2(-dir.x, -dir.z)
 		
 	health_changed.emit(current_health, max_health)
 	

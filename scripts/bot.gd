@@ -5,6 +5,12 @@ enum Faction { TEAM_ALPHA, TEAM_BRAVO }
 @export var faction: Faction = Faction.TEAM_BRAVO
 @export var character_class: CharacterClass
 
+@export_group("Aim")
+## Spread multiplier right after the bot takes damage (1.0 = no penalty).
+@export var flinch_spread_multiplier: float = 2.0
+## Seconds for the flinch penalty to fade back to normal.
+@export var flinch_duration: float = 1.0
+
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var move_speed: float = 3.0
 var attack_damage: float = 10.0
@@ -57,6 +63,14 @@ var _siphon_time_left: float = 0.0
 var _siphon_tick_timer: float = 0.0
 
 var _since_damage: float = 99.0       # Seconds since we last took damage ("under fire" check)
+
+# --- Aim & reaction (values come from the CharacterClass in apply_class) ---
+var aim_spread_degrees: float = 2.0
+var reaction_min: float = 0.3
+var reaction_max: float = 0.5
+var _engaged_target: Node3D = null    # Who we are currently fighting
+var _reaction_left: float = 0.0       # Time until we may fire after spotting someone
+var _disengaged_time: float = 0.0     # How long we have been out of a fight
 
 func _ready():
 	# --- Apply Team Color ---
@@ -128,6 +142,9 @@ func apply_class():
 	attack_damage = character_class.gun_damage
 	attack_cooldown = character_class.fire_rate
 	attack_range = 15 # character_class.gun_range later
+	aim_spread_degrees = character_class.bot_spread_degrees
+	reaction_min = character_class.bot_reaction_min
+	reaction_max = maxf(character_class.bot_reaction_max, reaction_min)
 	
 	if health_component:
 		health_component.max_health = character_class.max_health
@@ -217,8 +234,13 @@ func _on_died():
 	# Death Effect (We'll add this below)
 	_spawn_death_debris()
 	
+	# The corpse shouldn't block shots, bodies, or the capture point while it shrinks
+	$CollisionShape3D.set_deferred("disabled", true)
+
+	# Shrink to a tiny size, never exactly zero: a zero-scale transform is singular
+	# and makes the engine log "invert: Condition det == 0".
 	var tween = create_tween()
-	tween.tween_property(self, "scale", Vector3.ZERO, 0.3).set_ease(Tween.EASE_IN)
+	tween.tween_property(self, "scale", Vector3.ONE * 0.01, 0.3).set_ease(Tween.EASE_IN)
 	tween.tween_callback(queue_free)
 
 func _physics_process(delta: float):
@@ -262,6 +284,11 @@ func _physics_process(delta: float):
 func _move_and_fight(delta: float, combat_target: Node3D):
 	var target_destination = Vector3.ZERO
 
+	# Out of a fight for over a second? The next enemy we see is a fresh engagement.
+	_disengaged_time += delta
+	if _disengaged_time > 1.0:
+		_engaged_target = null
+
 	# Priority 1: If an opponent is in range and visible, fight them!
 	if combat_target:
 		var to_target = combat_target.global_position - global_position
@@ -275,6 +302,16 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 
 			if to_target.length_squared() > 0.01:
 				rotation.y = atan2(-to_target.x, -to_target.z)
+
+			# Reaction delay: a fresh engagement (or a new target after a kill)
+			# costs a short random "spotting" time before the first shot.
+			_disengaged_time = 0.0
+			if not _is_valid_target(_engaged_target):
+				_reaction_left = randf_range(reaction_min, reaction_max)
+			_engaged_target = combat_target
+			if _reaction_left > 0.0:
+				_reaction_left -= delta
+				return # Spotted them, still reacting: no shot yet
 
 			_attack_timer -= delta
 			if _attack_timer <= 0.0:
@@ -339,7 +376,9 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 			rotation.y = atan2(-to_point.x, -to_point.z)
 
 ## True if the node is a living, valid target (players, bots, anything with health).
-func _is_valid_target(t: Node3D) -> bool:
+# NOTE: deliberately untyped. A typed parameter (t: Node3D) is checked BEFORE the
+# body runs, so passing a freed object would crash before is_instance_valid() could catch it.
+func _is_valid_target(t) -> bool:
 	if not is_instance_valid(t):
 		return false
 	if "is_alive" in t and not t.is_alive:
@@ -356,7 +395,8 @@ func _ray_exclude() -> Array[RID]:
 			ex.append(w.get_rid())
 	return ex
 
-func has_line_of_sight(target: Node3D) -> bool:
+# Untyped for the same reason as _is_valid_target: callers may hold a freed reference.
+func has_line_of_sight(target) -> bool:
 	# Safety check: If the target doesn't exist anymore, we don't have line of sight!
 	if not is_instance_valid(target):
 		return false
@@ -400,33 +440,61 @@ func _find_nearest_target() -> Node3D:
 			
 	return nearest
 
+## Current aim error (std-dev, degrees). Gets worse right after the bot is hit.
+func _current_spread_degrees() -> float:
+	var flinch = clampf(1.0 - _since_damage / maxf(flinch_duration, 0.01), 0.0, 1.0)
+	return aim_spread_degrees * (1.0 + (flinch_spread_multiplier - 1.0) * flinch)
+
+## Deflects a direction by a random gaussian error on two axes.
+## The miss DISTANCE grows with range automatically, since the error is angular.
+func _apply_spread(dir: Vector3, sigma_deg: float) -> Vector3:
+	if sigma_deg <= 0.0:
+		return dir
+	var right = dir.cross(Vector3.UP)
+	if right.length_squared() < 0.001:
+		right = Vector3.RIGHT
+	right = right.normalized()
+	var up = right.cross(dir).normalized()
+	return dir.rotated(up, deg_to_rad(randfn(0.0, sigma_deg))) \
+		.rotated(right, deg_to_rad(randfn(0.0, sigma_deg))).normalized()
+
 func _attack(target: Node3D):
 	_attack_timer = attack_cooldown
 	var to_target = target.global_position - global_position
 	to_target.y = 0.0
 	rotation.y = atan2(-to_target.x, -to_target.z)
-	
+
+	# Aim at the target, then add aim error
+	var origin = global_position + Vector3(0, 0.5, 0)
+	var aim_point = target.global_position + Vector3(0, 0.5, 0)
+	var dir = _apply_spread((aim_point - origin).normalized(), _current_spread_degrees())
+
+	var shot_length = attack_range + 5.0
+	var end_point = origin + dir * shot_length
+
 	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(
-		global_position + Vector3(0, 0.5, 0), 
-		target.global_position + Vector3(0, 0.5, 0) 
-	)
-	query.exclude = _ray_exclude() 
-	
+	var query = PhysicsRayQueryParameters3D.create(origin, end_point)
+	query.exclude = _ray_exclude()
 	var result = space_state.intersect_ray(query)
-	
-	if result and result.collider == target:
-		if target.has_method("take_damage"):
+
+	if result:
+		end_point = result.position
+		# Whatever the shot actually hits takes the damage. Enemies only (no friendly fire),
+		# so a wide shot can clip a different enemy, and walls block it.
+		var hit = result.collider
+		if hit.has_method("take_damage") and "faction" in hit and hit.faction != faction and _is_valid_target(hit):
 			var my_name = character_class.class_name_str if character_class else "Bot"
 			var damage = attack_damage * _damage_multiplier
-			if target == _locked_target:
+			if hit == _locked_target:
 				damage *= 1.3 # Target Lock bonus, same as the player's version
-			target.take_damage(damage, faction, my_name)
-			_spawn_bot_tracer(global_position + Vector3(0, 0.5, 0), result.position)
+			hit.take_damage(damage, faction, my_name)
+
+	# Tracer on every shot, so you can SEE bots miss
+	_spawn_bot_tracer(origin, end_point)
 
 	if AudioManager:
 		AudioManager.play_shoot(global_position)
-		
+
 # ─── AI Abilities ───────────────────────────────────────────
 
 func _get_slot_type(slot: int) -> int:
@@ -726,12 +794,13 @@ func spawn_damage_number(amount: float):
 	label.outline_size = 10
 	label.outline_modulate = Color.BLACK
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED 
-	label.global_position = global_position + Vector3(0, 1.5, 0)
+	# Add to the tree FIRST: global_position only works on nodes inside the tree
 	get_tree().root.add_child(label)
+	label.global_position = global_position + Vector3(0, 1.5, 0)
 
 	var tween = label.create_tween()
 	tween.tween_property(label, "global_position", label.global_position + Vector3(0, 1.5, 0), 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(label, "scale", Vector3.ZERO, 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
+	tween.parallel().tween_property(label, "scale", Vector3.ONE * 0.01, 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
 	tween.tween_callback(label.queue_free)
 
 func _spawn_death_debris():

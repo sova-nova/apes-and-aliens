@@ -52,6 +52,28 @@ func swap_roles():
 	PlayerSetup.attacking_team = defending_team
 	set_roles(defending_team)
 
+## Single source of truth for where a team spawns RIGHT NOW (match start and respawns).
+## Roles decide the side: the attacking team uses attacker spawns, the other uses defender spawns.
+## Returns Vector3.INF if the current scene has no spawns (e.g. menus), so callers can skip.
+func get_spawn_position(team: int) -> Vector3:
+	var is_attacker = (team == attacking_team)
+	var exact: Array = []
+	var fallback: Array = []
+
+	for sp in get_tree().get_nodes_in_group("spawn_points"):
+		if not is_instance_valid(sp) or sp.for_attackers != is_attacker:
+			continue
+		if sp.is_fallback:
+			fallback.append(sp)
+		elif sp.for_active_point == current_point_index:
+			exact.append(sp)
+
+	# Prefer a spawn made for the point being fought over, else any fallback for this role
+	var pool = exact if not exact.is_empty() else fallback
+	if pool.is_empty():
+		return Vector3.INF
+	return pool.pick_random().get_spawn_position()
+
 func _process(delta):
 	if not is_match_playing:
 		return
