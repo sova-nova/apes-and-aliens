@@ -81,7 +81,7 @@ Handy places to tune the game:
 
 - Built with the [Godot Engine](https://godotengine.org/) (MIT license).
 - Placeholder sound effects (abilities, countdown, jingles, and so on) are synthesized by `tools/make_sfx.py`.
-- The shoot, hit, capture, and Bulwark sounds: (https://kenney.nl/assets/sci-fi-sounds) (https://creativecommons.org/publicdomain/zero/1.0/)
+- The shoot, hit, capture, and Bulwark sounds: [Kenney Sounds](https://kenney.nl/assets/sci-fi-sounds) [CCO License](https://creativecommons.org/publicdomain/zero/1.0/)
 
 ## License
 
