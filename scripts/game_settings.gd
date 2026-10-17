@@ -99,9 +99,42 @@ static func reset_crosshair() -> void:
 	crosshair_outline = true
 	crosshair_dot = false
 
+# Where the window was before going fullscreen, so leaving fullscreen can put it back
+static var _windowed_size: Vector2i = Vector2i.ZERO
+static var _windowed_position: Vector2i = Vector2i.ZERO
+
+## False when the game runs inside the editor's Game tab: that embedded window can only be windowed.
+## (Run an exported build, or turn off "Embed Game on Next Play", to try fullscreen.)
+static func is_fullscreen_supported() -> bool:
+	return not Engine.is_embedded_in_editor()
+
 static func apply_video() -> void:
-	DisplayServer.window_set_mode(
-		DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
+	if not is_fullscreen_supported():
+		return
+
+	var mode := DisplayServer.window_get_mode()
+	var is_full := mode == DisplayServer.WINDOW_MODE_FULLSCREEN \
+		or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	if fullscreen == is_full:
+		return # Already how we want it. (Setting the mode again can make some window managers glitch.)
+
+	if fullscreen:
+		_windowed_size = DisplayServer.window_get_size()
+		_windowed_position = DisplayServer.window_get_position()
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		# Fullscreen switches the borderless flag on. Switch it back off, or the window stays without a title bar.
+		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
+		if _windowed_size != Vector2i.ZERO:
+			_restore_windowed_size()
+
+static func _restore_windowed_size() -> void:
+	# Some window managers apply the mode change a moment later, and resizing too early gets overwritten
+	var tree := Engine.get_main_loop() as SceneTree
+	await tree.create_timer(0.1).timeout
+	DisplayServer.window_set_size(_windowed_size)
+	DisplayServer.window_set_position(_windowed_position)
 
 static func apply_audio() -> void:
 	var bus := AudioServer.get_bus_index("Master")

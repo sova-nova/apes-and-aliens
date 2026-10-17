@@ -88,8 +88,14 @@ func _build_general_tab(parent: Control) -> void:
 
 	# Fullscreen
 	var fullscreen_check := CheckButton.new()
-	fullscreen_check.text = "Fullscreen"
-	fullscreen_check.button_pressed = GameSettings.fullscreen # Set before connecting, so it doesn't fire
+	if GameSettings.is_fullscreen_supported():
+		fullscreen_check.text = "Fullscreen"
+	else:
+		# The editor's embedded Game tab can only show a window, so say so instead of silently doing nothing
+		fullscreen_check.text = "Fullscreen (unavailable in the editor's Game tab)"
+		fullscreen_check.disabled = true
+	# Set before connecting, so it doesn't fire
+	fullscreen_check.button_pressed = GameSettings.fullscreen and GameSettings.is_fullscreen_supported()
 	fullscreen_check.toggled.connect(_on_fullscreen_toggled)
 	parent.add_child(fullscreen_check)
 
