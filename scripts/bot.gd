@@ -29,6 +29,12 @@ enum DefendRole { ANCHOR, HOLDER, FORWARD }
 ## Draws each bot's navigation path. Costly with many bots, so leave it off unless diagnosing pathing.
 @export var debug_navigation: bool = false
 
+@export_group("Performance")
+## How often (seconds) a bot looks for the nearest enemy. Staggered per bot.
+@export var target_scan_interval: float = 0.2
+## How often (seconds) a bot re-checks line of sight to its target.
+@export var los_check_interval: float = 0.1
+
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var move_speed: float = 3.0
 var attack_damage: float = 10.0
@@ -90,6 +96,15 @@ var _engaged_target: Node3D = null    # Who we are currently fighting
 var _reaction_left: float = 0.0       # Time until we may fire after spotting someone
 var _disengaged_time: float = 0.0     # How long we have been out of a fight
 
+# --- Targeting cache (scans and line-of-sight checks are throttled, see _get_combat_target / _can_see) ---
+var _cached_target: Node3D = null
+var _has_cached_target: bool = false
+var _scan_timer: float = randf() * 0.2   # Staggered so bots don't all scan on the same frame
+var _los_target: Node3D = null
+var _los_cache: bool = false
+var _los_timer: float = 0.0
+var _cover_group: String = ""            # Group our team's cover walls join (see _ray_exclude)
+
 # --- Defender AI state ---
 var defend_role: DefendRole = DefendRole.HOLDER
 var _guard_post: Vector3 = Vector3.ZERO
@@ -100,15 +115,15 @@ var _defender_at_post: bool = false        # True while holding a post (vs conte
 func _ready():
 	# --- Apply Team Color ---
 	if mesh_instance:
-		var team_mat = StandardMaterial3D.new()
-		team_mat.roughness = 0.8
-		team_mat.albedo_color = GameManager.get_team_color(faction)
+		var team_mat = CombatFx.team_material(faction) # Shared by every bot on this team
 		mesh_instance.material_override = team_mat
 		original_material = team_mat
 		
 	health_component.died.connect(_on_died)
 	nav_agent.debug_enabled = debug_navigation
 	add_to_group("bots")
+	add_to_group(GameManager.TEAM_GROUPS[faction]) # Enemies find us through this group
+	_cover_group = "cover_walls_%d" % faction
 	
 	if character_class:
 		apply_class()
@@ -213,21 +228,11 @@ func update_health_bar():
 	
 func set_vulnerable(state: bool):
 	is_vulnerable = state
-	if state and mesh_instance:
-		var mat = StandardMaterial3D.new()
-		mat.albedo_color = Color.ORANGE
-		mesh_instance.material_override = mat
-		await get_tree().create_timer(0.2).timeout
-		mesh_instance.material_override = original_material
+	if state:
+		_flash_color(Color.ORANGE, 0.2)
 
 func _flash_damage():
-	if not mesh_instance:
-		return
-	var flash_mat = StandardMaterial3D.new()
-	flash_mat.albedo_color = Color.RED
-	mesh_instance.material_override = flash_mat
-	await get_tree().create_timer(0.1).timeout
-	mesh_instance.material_override = original_material
+	_flash_color(Color.RED, 0.1)
 
 func _on_died():
 	# Don't leave an enemy permanently marked vulnerable
@@ -239,7 +244,7 @@ func _on_died():
 	GameManager.kill_occurred.emit(last_attacker_name, my_name, faction)
 	
 	# Death Effect (We'll add this below)
-	_spawn_death_debris()
+	CombatFx.death_debris(self, global_position, faction)
 	
 	# The corpse shouldn't block shots, bodies, or the capture point while it shrinks
 	$CollisionShape3D.set_deferred("disabled", true)
@@ -267,7 +272,8 @@ func _physics_process(delta: float):
 	_tick_effects(delta)
 
 	# --- Abilities are evaluated in EVERY state, including mid-fight ---
-	var combat_target = _find_nearest_target()
+	_los_timer -= delta
+	var combat_target = _get_combat_target(delta)
 	_ability_eval_timer -= delta
 	if _ability_eval_timer <= 0.0:
 		_ability_eval_timer = 0.5
@@ -302,7 +308,7 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 		to_target.y = 0.0
 		var dist = to_target.length()
 
-		if dist <= attack_range and has_line_of_sight(combat_target):
+		if dist <= attack_range and _can_see(combat_target):
 			# ATTACK MODE
 			velocity.x = move_toward(velocity.x, 0.0, move_speed)
 			velocity.z = move_toward(velocity.z, 0.0, move_speed)
@@ -479,7 +485,7 @@ func _is_valid_target(t) -> bool:
 ## Our own team's cover walls never block our shots.
 func _ray_exclude() -> Array[RID]:
 	var ex: Array[RID] = [get_rid()]
-	for w in get_tree().get_nodes_in_group("cover_walls_%d" % faction):
+	for w in get_tree().get_nodes_in_group(_cover_group):
 		if w is CollisionObject3D and is_instance_valid(w):
 			ex.append(w.get_rid())
 	return ex
@@ -502,32 +508,45 @@ func has_line_of_sight(target) -> bool:
 		return true
 	return false
 
+## The nearest living enemy. Only scans the enemy team's group, so no team or self checks needed.
 func _find_nearest_target() -> Node3D:
-	var potential_targets = []
-	potential_targets.append_array(get_tree().get_nodes_in_group("players"))
-	potential_targets.append_array(get_tree().get_nodes_in_group("bots"))
-	
+	var enemy_group = GameManager.TEAM_GROUPS[GameManager.get_opposing_team(faction)]
+	var my_pos = global_position
 	var nearest: Node3D = null
-	var nearest_dist: float = INF
-	
-	for t in potential_targets:
-		if not is_instance_valid(t): continue 
-		if t == self: continue 
-		if not "faction" in t: continue 
-		
-		# CRITICAL: Don't target dead players/bots!
-		if not _is_valid_target(t):
+	var nearest_dist_sq: float = INF
+
+	for t in get_tree().get_nodes_in_group(enemy_group):
+		if not _is_valid_target(t): # Skips dead players/bots, including ones still shrinking away
 			continue
-			
-		if t.faction == self.faction:
-			continue
-			
-		var dist = global_position.distance_to(t.global_position)
-		if dist < nearest_dist:
-			nearest_dist = dist
+		var dist_sq = my_pos.distance_squared_to(t.global_position)
+		if dist_sq < nearest_dist_sq:
+			nearest_dist_sq = dist_sq
 			nearest = t
-			
+
 	return nearest
+
+## The enemy we're fighting. Rescans every `target_scan_interval`, or at once when our target dies.
+func _get_combat_target(delta: float) -> Node3D:
+	_scan_timer -= delta
+
+	if _has_cached_target and not _is_valid_target(_cached_target):
+		_cached_target = null
+		_has_cached_target = false
+		_scan_timer = 0.0 # Lost our target: look for a new one right away
+
+	if _scan_timer <= 0.0:
+		_scan_timer = target_scan_interval * randf_range(0.8, 1.2)
+		_cached_target = _find_nearest_target()
+		_has_cached_target = _cached_target != null
+	return _cached_target
+
+## Line of sight, re-checked every `los_check_interval` (or at once for a new target) instead of every frame.
+func _can_see(target) -> bool:
+	if target != _los_target or _los_timer <= 0.0:
+		_los_target = target
+		_los_cache = has_line_of_sight(target)
+		_los_timer = los_check_interval * randf_range(0.8, 1.2)
+	return _los_cache
 
 ## Current aim error (std-dev, degrees). Gets worse right after the bot is hit.
 func _current_spread_degrees() -> float:
@@ -579,7 +598,7 @@ func _attack(target: Node3D):
 			hit.take_damage(damage, faction, my_name)
 
 	# Tracer on every shot, so you can SEE bots miss
-	_spawn_bot_tracer(origin, end_point)
+	CombatFx.tracer(self, origin, end_point, Color.RED, 0.05, 0.05)
 
 	if AudioManager:
 		AudioManager.play_shoot(global_position)
@@ -607,7 +626,7 @@ func _evaluate_abilities(target: Node3D):
 	var los = false
 	if has_target:
 		dist = global_position.distance_to(target.global_position)
-		los = has_line_of_sight(target)
+		los = _can_see(target)
 	var health_pct = health_component.current_health / health_component.max_health
 
 	for slot in range(3):
@@ -700,11 +719,11 @@ func _bot_dash(target: Node3D):
 		away = -global_transform.basis.z
 	_start_burst(away.normalized() * move_speed * 6.0, 0.25)
 	_dash_left = 0.25
-	_flash_ability_color(Color.CYAN, 0.25)
+	_flash_color(Color.CYAN, 0.25)
 
 func _bot_overcharge():
 	_overcharge_left = 4.0
-	_flash_ability_color(Color.ORANGE, 0.4) # Short flash so team color stays readable
+	_flash_color(Color.ORANGE, 0.4) # Short flash so team color stays readable
 
 func _bot_adrenaline():
 	# Mirrors the player's version: costs 20 HP (never lethal), refreshes slots 1 and 2, brief speed boost
@@ -713,7 +732,7 @@ func _bot_adrenaline():
 	ability_cooldowns[0] = 0.0
 	ability_cooldowns[1] = 0.0
 	_adrenaline_left = 2.0
-	_flash_ability_color(Color.YELLOW, 0.15)
+	_flash_color(Color.YELLOW, 0.15)
 
 # --- Warden ---
 
@@ -753,7 +772,7 @@ func _bot_deploy_cover(target: Node3D):
 	wall.rotation.y = atan2(dir.x, dir.z)
 
 	# Allies shoot through it (same rule the player's own walls follow)
-	wall.add_to_group("cover_walls_%d" % faction)
+	wall.add_to_group(_cover_group)
 	for p in get_tree().get_nodes_in_group("players"):
 		if "faction" in p and p.faction == faction and "aim_ray" in p and p.aim_ray:
 			p.aim_ray.add_exception(wall)
@@ -763,29 +782,24 @@ func _bot_deploy_cover(target: Node3D):
 	tween.tween_interval(6.0)
 	tween.tween_callback(wall.queue_free)
 
-	_flash_ability_color(Color.DODGER_BLUE, 0.2)
+	_flash_color(Color.DODGER_BLUE, 0.2)
 
 func _bot_bulwark():
 	_bulwark_left = 4.0
 	AudioManager.play_bulwark(global_position)
-	_flash_ability_color(Color.DODGER_BLUE, 0.4)
+	_flash_color(Color.DODGER_BLUE, 0.4)
 
 func _bot_shockwave():
 	# Knocks back every enemy within 5 m, same as the player's version
-	var targets = []
-	targets.append_array(get_tree().get_nodes_in_group("players"))
-	targets.append_array(get_tree().get_nodes_in_group("bots"))
-
-	for t in targets:
-		if t == self or not _is_valid_target(t):
-			continue
-		if not ("faction" in t) or t.faction == faction:
+	var enemy_group = GameManager.TEAM_GROUPS[GameManager.get_opposing_team(faction)]
+	for t in get_tree().get_nodes_in_group(enemy_group):
+		if not _is_valid_target(t):
 			continue
 		if global_position.distance_to(t.global_position) < 5.0 and t.has_method("apply_knockback"):
 			var push_dir = (t.global_position - global_position).normalized()
 			t.apply_knockback(push_dir * 15.0 + Vector3.UP * 5.0)
 
-	_flash_ability_color(Color.RED, 0.2)
+	_flash_color(Color.RED, 0.2)
 
 # --- Ghost ---
 
@@ -796,7 +810,7 @@ func _bot_grapple(target: Node3D):
 	if toward.length_squared() < 0.01:
 		return
 	_start_burst(toward.normalized() * move_speed * 5.0, 0.35)
-	_flash_ability_color(Color.CYAN, 0.35)
+	_flash_color(Color.CYAN, 0.35)
 
 func _bot_target_lock(target: Node3D):
 	_end_target_lock()
@@ -806,7 +820,7 @@ func _bot_target_lock(target: Node3D):
 	# player the lock only gives the bot's +30% damage bonus (see _attack).
 	if target.has_method("set_vulnerable"):
 		target.set_vulnerable(true)
-	_flash_ability_color(Color.RED, 0.2)
+	_flash_color(Color.RED, 0.2)
 
 func _tick_target_lock(delta: float):
 	if _locked_target == null:
@@ -824,7 +838,7 @@ func _bot_life_siphon(target: Node3D):
 	_siphon_target = target
 	_siphon_time_left = 3.0
 	_siphon_tick_timer = 0.5
-	_flash_ability_color(Color.MEDIUM_PURPLE, 0.4)
+	_flash_color(Color.MEDIUM_PURPLE, 0.4)
 
 func _tick_siphon(delta: float):
 	if _siphon_time_left <= 0.0:
@@ -847,89 +861,11 @@ func _tick_siphon(delta: float):
 		health_component.heal(8.0)
 		update_health_bar()
 
-func _flash_ability_color(color: Color, duration: float = 0.3):
+## Briefly tints the bot. The material is shared, and _tick_effects restores the team color.
+func _flash_color(color: Color, duration: float = 0.3):
 	if not mesh_instance: return
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = color
-	mesh_instance.material_override = mat
+	mesh_instance.material_override = CombatFx.material(color)
 	_flash_left = duration
 
-func _spawn_bot_tracer(from: Vector3, to: Vector3):
-	var tracer = MeshInstance3D.new()
-	var sphere = SphereMesh.new()
-	sphere.radius = 0.05
-	sphere.height = 0.1
-	tracer.mesh = sphere
-
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color.RED
-	tracer.material_override = mat
-
-	get_tree().root.add_child(tracer)
-	tracer.global_position = from
-
-	var tween = create_tween()
-	tween.tween_property(tracer, "global_position", to, 0.05)
-	tween.tween_callback(tracer.queue_free)
-
 func spawn_damage_number(amount: float):
-	var label = Label3D.new()
-	label.text = str(int(amount))
-	label.font_size = 64
-	label.modulate = Color.YELLOW
-	label.pixel_size = 0.01 
-	label.outline_size = 10
-	label.outline_modulate = Color.BLACK
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED 
-	# Add to the tree FIRST: global_position only works on nodes inside the tree
-	get_tree().root.add_child(label)
-	label.global_position = global_position + Vector3(0, 1.5, 0)
-
-	var tween = label.create_tween()
-	tween.tween_property(label, "global_position", label.global_position + Vector3(0, 1.5, 0), 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(label, "scale", Vector3.ONE * 0.01, 0.8).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
-	tween.tween_callback(label.queue_free)
-
-func _spawn_death_debris():
-	var debris_count = 6
-	for i in range(debris_count):
-		var debris = RigidBody3D.new()
-		var mesh_inst = MeshInstance3D.new()
-		var col_shape = CollisionShape3D.new()
-		
-		var box_mesh = BoxMesh.new()
-		var box_shape = BoxShape3D.new()
-		
-		# Theme differences!
-		var mat = StandardMaterial3D.new()
-		if faction == GameManager.TEAM_ALPHA: # Apes
-			box_mesh.size = Vector3(0.15, 0.15, 0.15)
-			box_shape.size = Vector3(0.15, 0.15, 0.15)
-			mat.albedo_color = Color.BURLYWOOD # Brown/yarn
-		else: # Aliens
-			box_mesh.size = Vector3(0.1, 0.1, 0.2) # Flat metal scraps
-			box_shape.size = Vector3(0.1, 0.1, 0.2)
-			mat.albedo_color = Color.LIGHT_GRAY
-			
-		mesh_inst.mesh = box_mesh
-		mesh_inst.material_override = mat
-		col_shape.shape = box_shape
-		
-		debris.add_child(mesh_inst)
-		debris.add_child(col_shape)
-		
-		# 1. ADD TO TREE FIRST! 
-		get_tree().root.add_child(debris)
-		
-		# 2. NOW set the position and velocity!
-		# Spawn at the bot's chest
-		debris.global_position = global_position + Vector3(0, 0.5, 0)
-		# Add some random offset so they don't spawn perfectly inside each other
-		debris.global_position += Vector3(randf_range(-0.3, 0.3), 0, randf_range(-0.3, 0.3))
-		
-		# Set velocity directly for the explosion
-		var explosion_dir = Vector3(randf_range(-1, 1), randf_range(1, 3), randf_range(-1, 1))
-		debris.linear_velocity = explosion_dir * 5.0
-		
-		# Clean up after 3 seconds so we don't lag the game
-		get_tree().create_timer(3.0).timeout.connect(debris.queue_free)
+	CombatFx.damage_number(self, global_position + Vector3(0, 1.5, 0), amount)

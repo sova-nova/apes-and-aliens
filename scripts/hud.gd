@@ -27,18 +27,30 @@ func _ready():
 			GameManager.kill_occurred.connect(_on_kill_occurred)
 
 func _process(_delta: float):
-	if not _player:
+	if not visible:
+		return # Menus: nothing to bind or refresh
+
+	# (Re)bind to the player. is_instance_valid also catches a player freed by a scene reload,
+	# which a plain `if not _player` can't tell apart from a live one.
+	if not is_instance_valid(_player):
 		_player = _find_player()
 		if _player:
 			_player.health_changed.connect(_on_health_changed)
 			_player.ability_status_changed.connect(_on_ability_status_changed)
 			_player.class_changed.connect(_on_class_changed)
-			
-			# FIX: Manually trigger the UI update right now for the starting class!
+			_player.ammo_changed.connect(_on_ammo_changed)
+
+			# Show the starting state right away
 			if _player.character_class:
 				_on_class_changed(_player.character_class.class_name_str)
 				_on_health_changed(_player.current_health, _player.max_health)
-				
+				_on_ammo_changed(_player.current_ammo, _player.max_ammo, _player.is_reloading)
+
+	# The ability readout is rebuilt at most once per frame, and only if something changed
+	if _ability_dirty:
+		_ability_dirty = false
+		_refresh_ability_label()
+
 func _on_match_timer_updated(time_left: float):
 	if not timer_label: return
 	var minutes = int(time_left) / 60
@@ -106,7 +118,7 @@ func show_hit_marker():
 		_hit_tween.tween_callback(func(): crosshair.text = "+")
 		_hit_tween.tween_callback(func(): crosshair.add_theme_color_override("font_color", Color.WHITE))
 		
-func update_ammo(current: int, max_ammo: int, is_reloading: bool):
+func _on_ammo_changed(current: int, max_ammo: int, is_reloading: bool):
 	if not ammo_label: return
 	if is_reloading:
 		ammo_label.text = "RELOADING..."
@@ -153,38 +165,35 @@ func _find_player() -> CharacterBody3D:
 		return players[0]
 	return null
 	
-# We use variables to store the status of all 3 abilities
+# Ability readout state. The label is rebuilt once per frame, and only when something changed.
 var _ability_timers: Array = [0.0, 0.0, 0.0]
 var _ability_ready: Array = [true, true, true]
+var _ability_dirty: bool = false
+var _first_ability_was_ready: bool = false # So the color override is only touched when it flips
 
 func _on_ability_status_changed(slot: int, is_ready: bool, time_left: float):
-	# Store the data for the slot that just updated
 	_ability_timers[slot] = time_left
 	_ability_ready[slot] = is_ready
-	
-	# Update the UI label
+	_ability_dirty = true
+
+func _refresh_ability_label():
 	if not ability_label:
 		return
-		
+
 	var keys = ["Q", "E", "Shift"]
 	var text_lines = []
-	
-	# Build a string for all 3 abilities
 	for i in range(3):
 		if _ability_ready[i]:
 			text_lines.append("%s: [Ready]" % keys[i])
 		else:
 			text_lines.append("%s: [%.1f]" % [keys[i], _ability_timers[i]])
-			
-	# Join them with line breaks so they stack nicely in the corner
 	ability_label.text = "\n".join(text_lines)
-	
-	# Turn green if the first ability is ready, white otherwise
-	if _ability_ready[0]:
-		ability_label.add_theme_color_override("font_color", Color.GREEN)
-	else:
-		ability_label.add_theme_color_override("font_color", Color.WHITE)
-		
+
+	# Green while the first ability is ready, white otherwise
+	if _ability_ready[0] != _first_ability_was_ready:
+		_first_ability_was_ready = _ability_ready[0]
+		ability_label.add_theme_color_override("font_color", Color.GREEN if _first_ability_was_ready else Color.WHITE)
+
 func _on_objective_updated(active_point_order: int):
 	if not objective_label:
 		return

@@ -17,6 +17,10 @@ var controlling_team: int = -1    # -1 until captured, then the attacking team
 var attackers_on_point: int = 0
 var defenders_on_point: int = 0
 
+# What the UI last drew, so update_ui can skip frames where nothing visible changed
+var _ui_pct: int = -1
+var _ui_state: int = -1
+
 var progress_circle: MeshInstance3D
 var progress_mat: StandardMaterial3D
 
@@ -110,6 +114,14 @@ func should_hold_overtime() -> bool:
 func update_ui():
 	if not status_label:
 		return
+
+	# Skip the work unless the shown percent or the point's state changed
+	var state = 3 if is_captured else (0 if not is_active else (2 if is_contested else 1))
+	var pct = int(capture_progress)
+	if pct == _ui_pct and state == _ui_state:
+		return
+	_ui_pct = pct
+	_ui_state = state
 
 	# Progress circle (never scale to exactly 0, it creates a singular transform)
 	var progress_pct = capture_progress / 100.0

@@ -12,6 +12,10 @@ const TEAM_NONE := -1
 const TEAM_ALPHA := 0 # Apes
 const TEAM_BRAVO := 1 # Chrome Legion
 
+# Every player and bot joins the group for its team, so targeting only has to scan enemies.
+# Indexed by team: GameManager.TEAM_GROUPS[team]
+const TEAM_GROUPS := ["alpha_combatants", "bravo_combatants"]
+
 var points_captured: int = 0
 
 var attacking_team: int = TEAM_ALPHA
@@ -106,8 +110,11 @@ func _process(delta):
 		return
 
 	if not is_overtime:
+		var previous_second = floori(match_time_left)
 		match_time_left = max(0.0, match_time_left - delta)
-		match_timer_updated.emit(match_time_left)
+		# The HUD shows whole seconds, so only announce the time when the shown second changes
+		if floori(match_time_left) != previous_second:
+			match_timer_updated.emit(match_time_left)
 		if match_time_left <= 0.0:
 			_check_overtime()
 	else:
@@ -156,6 +163,7 @@ func initialize_level():
 		objective_updated.emit(capture_points[0].point_order)
 
 	score_updated.emit(points_captured, capture_points.size())
+	match_timer_updated.emit(match_time_left) # Show the full time during the countdown
 
 func start_match_countdown():
 	match_state_changed.emit("3")

@@ -44,7 +44,6 @@ func _spawn_bot(team: int):
 	
 	var new_bot = enemy_scene.instantiate()
 	new_bot.faction = team
-	new_bot.add_to_group("bots")
 	
 	# Assign a random class to the bot
 	if bot_classes.size() > 0:

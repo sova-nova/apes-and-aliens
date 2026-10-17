@@ -61,6 +61,12 @@ var _is_invulnerable: bool:
 		return _is_dashing or _spawn_protected
 var _dash_direction: Vector3 = Vector3.ZERO
 var _knockback_velocity: Vector3 = Vector3.ZERO
+
+# What we last told the HUD, so signals only fire when something actually changed
+var _sent_ammo: int = -1
+var _sent_max_ammo: int = -1
+var _sent_reloading: bool = false
+var _last_ability_shown: Array[float] = [-2.0, -2.0, -2.0]
 var is_vulnerable: bool = false # Target Lock debuff: take +10% damage
 var _vulnerable_light: OmniLight3D = null
 
@@ -75,6 +81,7 @@ signal health_changed(new_health: float, max_health: float)
 signal died
 signal ability_status_changed(slot: int, is_ready: bool, time_left: float)
 signal class_changed(new_class_name: String)
+signal ammo_changed(current: int, max_ammo: int, is_reloading: bool)
 
 
 func _ready():
@@ -93,6 +100,7 @@ func _ready():
 	
 	# --- APPLY SETUP DATA ---
 	faction = PlayerSetup.selected_faction
+	add_to_group(GameManager.TEAM_GROUPS[faction]) # Enemy bots find us through this group
 	if available_classes.size() > PlayerSetup.selected_class_index:
 		character_class = available_classes[PlayerSetup.selected_class_index]
 		
@@ -171,8 +179,8 @@ func _physics_process(delta: float):
 			is_reloading = false
 			current_ammo = max_ammo
 	
-	# Update HUD Ammo
-	HUD.update_ammo(current_ammo, max_ammo, is_reloading)
+	# Tell the HUD about ammo, but only when it changed
+	_sync_ammo_signal()
 			
 	if Input.is_action_just_pressed("reload") and not is_reloading and current_ammo < max_ammo:
 		is_reloading = true
@@ -284,9 +292,14 @@ func _physics_process(delta: float):
 
 	# --- Ability Logic ---
 	for i in range(3):
-		if ability_cooldowns[i] > 0:
+		if ability_cooldowns[i] > 0.0:
 			ability_cooldowns[i] -= delta
-		ability_status_changed.emit(i, ability_cooldowns[i] <= 0.0, ability_cooldowns[i])
+		# Only tell the HUD when what it SHOWS changes: each tenth of a second while cooling
+		# down, or the flip to ready (-1 marks "ready", so that flip is always seen).
+		var shown = snappedf(ability_cooldowns[i], 0.1) if ability_cooldowns[i] > 0.0 else -1.0
+		if shown != _last_ability_shown[i]:
+			_last_ability_shown[i] = shown
+			ability_status_changed.emit(i, ability_cooldowns[i] <= 0.0, ability_cooldowns[i])
 		
 	if Input.is_action_just_pressed("ability_1") and ability_cooldowns[0] <= 0.0:
 		_use_ability(0)
@@ -297,6 +310,13 @@ func _physics_process(delta: float):
 		
 
 # ─── Shooting ───────────────────────────────────────────────
+
+func _sync_ammo_signal():
+	if current_ammo != _sent_ammo or max_ammo != _sent_max_ammo or is_reloading != _sent_reloading:
+		_sent_ammo = current_ammo
+		_sent_max_ammo = max_ammo
+		_sent_reloading = is_reloading
+		ammo_changed.emit(current_ammo, max_ammo, is_reloading)
 
 func shoot():
 	# 1. Calculate base modified stats
@@ -353,11 +373,11 @@ func shoot():
 				
 				HUD.show_hit_marker()
 
-		_spawn_hit_effect(end_point, normal)
+		CombatFx.spark(self, end_point, normal)
 	else:
 		end_point = aim_ray.global_position + (-aim_ray.global_transform.basis.z * character_class.gun_range)
 
-	_spawn_tracer(origin, end_point)
+	CombatFx.tracer(self, origin, end_point, Color(1.0, 0.85, 0.3), 0.04, 0.06)
 
 func _flash_muzzle():
 	if not muzzle_flash:
@@ -365,40 +385,6 @@ func _flash_muzzle():
 	muzzle_flash.light_energy = 4.0
 	var tween = create_tween()
 	tween.tween_property(muzzle_flash, "light_energy", 0.0, 0.08)
-
-func _spawn_tracer(from: Vector3, to: Vector3):
-	var tracer = MeshInstance3D.new()
-	var sphere = SphereMesh.new()
-	sphere.radius = 0.04
-	sphere.height = 0.08
-	tracer.mesh = sphere
-
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(1.0, 0.85, 0.3)
-	tracer.material_override = mat
-
-	get_tree().root.add_child(tracer)
-	tracer.global_position = from
-
-	var tween = create_tween()
-	tween.tween_property(tracer, "global_position", to, 0.06)
-	tween.tween_callback(tracer.queue_free)
-
-func _spawn_hit_effect(pos: Vector3, normal: Vector3):
-	var spark = MeshInstance3D.new()
-	var sphere = SphereMesh.new()
-	sphere.radius = 0.06
-	sphere.height = 0.12
-	spark.mesh = sphere
-
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(1.0, 0.5, 0.1)
-	spark.material_override = mat
-
-	get_tree().root.add_child(spark)
-	spark.global_position = pos + normal * 0.02
-	await get_tree().create_timer(0.12).timeout
-	spark.queue_free()
 
 # ─── Ability System ────────────────────────────────────────
 
