@@ -52,11 +52,9 @@ func swap_roles():
 	PlayerSetup.attacking_team = defending_team
 	set_roles(defending_team)
 
-## Single source of truth for where a team spawns RIGHT NOW (match start and respawns).
-## Roles decide the side: the attacking team uses attacker spawns, the other uses defender spawns.
-## Returns Vector3.INF if the current scene has no spawns (e.g. menus), so callers can skip.
-func get_spawn_position(team: int) -> Vector3:
-	var is_attacker = (team == attacking_team)
+## Spawns that apply RIGHT NOW for a role: ones made for the current point,
+## else any fallback for that role. (Attackers/defenders are roles, not factions.)
+func _get_spawn_pool(is_attacker: bool) -> Array:
 	var exact: Array = []
 	var fallback: Array = []
 
@@ -68,11 +66,40 @@ func get_spawn_position(team: int) -> Vector3:
 		elif sp.for_active_point == current_point_index:
 			exact.append(sp)
 
-	# Prefer a spawn made for the point being fought over, else any fallback for this role
-	var pool = exact if not exact.is_empty() else fallback
+	return exact if not exact.is_empty() else fallback
+
+## Single source of truth for where a team spawns RIGHT NOW (match start and respawns).
+## Roles decide the side: the attacking team uses attacker spawns, the other uses defender spawns.
+## Returns Vector3.INF if the current scene has no spawns (e.g. menus), so callers can skip.
+func get_spawn_position(team: int) -> Vector3:
+	var pool = _get_spawn_pool(team == attacking_team)
 	if pool.is_empty():
 		return Vector3.INF
 	return pool.pick_random().get_spawn_position()
+
+## Flat, normalized direction from `from_pos` toward where attackers currently spawn.
+## Defenders use this to face the likely threat. ZERO if unknown.
+func get_attacker_direction(from_pos: Vector3) -> Vector3:
+	var pool = _get_spawn_pool(true)
+	if pool.is_empty():
+		return Vector3.ZERO
+	var sum = Vector3.ZERO
+	for sp in pool:
+		sum += sp.global_position
+	var dir = sum / pool.size() - from_pos
+	dir.y = 0.0
+	if dir.length_squared() < 0.01:
+		return Vector3.ZERO
+	return dir.normalized()
+
+## Flat distance from `pos` to the nearest attacker spawn (INF if none). Used to stop defenders spawn-camping.
+func distance_to_attacker_spawn(pos: Vector3) -> float:
+	var pool = _get_spawn_pool(true)
+	var best = INF
+	for sp in pool:
+		var d = Vector2(pos.x, pos.z).distance_to(Vector2(sp.global_position.x, sp.global_position.z))
+		best = minf(best, d)
+	return best
 
 func _process(delta):
 	if not is_match_playing:
@@ -100,8 +127,7 @@ func _check_overtime():
 		_end_match(defending_team)
 
 func initialize_level():
-	#team_alpha_score = 0
-	#team_bravo_score = 0
+	points_captured = 0 # Fresh score every match
 	current_point_index = 0
 	capture_points.clear()
 	active_capture_point = null
@@ -182,6 +208,7 @@ func _end_match(winner: int):
 	is_match_playing = false
 	is_overtime = false
 	winning_team = winner
+	PlayerSetup.record_result(winner)
 
 	game_won.emit(winner)
 	print("%s WIN" % get_team_name(winner))

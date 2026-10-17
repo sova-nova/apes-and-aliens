@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
 enum Faction { TEAM_ALPHA, TEAM_BRAVO }
+enum DefendRole { ANCHOR, HOLDER, FORWARD }
 
 @export var faction: Faction = Faction.TEAM_BRAVO
 @export var character_class: CharacterClass
@@ -10,6 +11,20 @@ enum Faction { TEAM_ALPHA, TEAM_BRAVO }
 @export var flinch_spread_multiplier: float = 2.0
 ## Seconds for the flinch penalty to fade back to normal.
 @export var flinch_duration: float = 1.0
+
+@export_group("Defender AI")
+## Chance a defender is an ANCHOR (holds close to the point).
+@export_range(0.0, 1.0) var anchor_chance: float = 0.3
+## Chance a defender is FORWARD (skirmishes out ahead). The rest are HOLDERs.
+@export_range(0.0, 1.0) var forward_chance: float = 0.2
+## Guard-post distance from the point as (min, max) metres, per role.
+@export var anchor_radius: Vector2 = Vector2(0.0, 4.0)
+@export var holder_radius: Vector2 = Vector2(5.0, 10.0)
+@export var forward_radius: Vector2 = Vector2(11.0, 16.0)
+## Defenders never post closer than this to the attackers' spawn.
+@export var min_spawn_distance: float = 12.0
+## How often (min, max seconds) holders and forwards move to a fresh post.
+@export var reposition_interval: Vector2 = Vector2(10.0, 20.0)
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var move_speed: float = 3.0
@@ -72,6 +87,13 @@ var _engaged_target: Node3D = null    # Who we are currently fighting
 var _reaction_left: float = 0.0       # Time until we may fire after spotting someone
 var _disengaged_time: float = 0.0     # How long we have been out of a fight
 
+# --- Defender AI state ---
+var defend_role: DefendRole = DefendRole.HOLDER
+var _guard_post: Vector3 = Vector3.ZERO
+var _post_facing: Vector3 = Vector3.ZERO   # Which way to look while holding (toward attackers)
+var _post_timer: float = 0.0
+var _defender_at_post: bool = false        # True while holding a post (vs contesting the point)
+
 func _ready():
 	# --- Apply Team Color ---
 	if mesh_instance:
@@ -90,6 +112,8 @@ func _ready():
 	
 	if character_class:
 		apply_class()
+
+	_assign_defend_role()
 		
 	# --- Generate Health Bar ---
 	var bar_container = Node3D.new()
@@ -331,8 +355,16 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 			else:
 				_current_point_target = _target_point_ref.global_position
 
-		# Set our destination to the specific random spot we chose
-		target_destination = _current_point_target
+			# New objective: defenders pick where to hold
+			if faction == GameManager.defending_team:
+				_choose_guard_post()
+
+		if faction == GameManager.defending_team:
+			# DEFENDERS hold a post and only step onto the point when it's threatened
+			target_destination = _get_defender_destination(delta)
+		else:
+			# ATTACKERS push onto the point
+			target_destination = _current_point_target
 
 	elif combat_target:
 		# Fallback: If no point exists, just walk toward the nearest opponent
@@ -372,10 +404,84 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 
 		var to_point = target_destination - global_position
 		to_point.y = 0.0
-		if to_point.length_squared() > 0.01:
+		if _defender_at_post and _post_facing != Vector3.ZERO:
+			# Holding a post: look toward where the attackers will come from
+			rotation.y = atan2(-_post_facing.x, -_post_facing.z)
+		elif to_point.length_squared() > 0.01:
 			rotation.y = atan2(-to_point.x, -to_point.z)
 
 ## True if the node is a living, valid target (players, bots, anything with health).
+# ─── Defender AI ────────────────────────────────────────────
+
+func _assign_defend_role():
+	var roll = randf()
+	if roll < anchor_chance:
+		defend_role = DefendRole.ANCHOR
+	elif roll < anchor_chance + forward_chance:
+		defend_role = DefendRole.FORWARD
+	else:
+		defend_role = DefendRole.HOLDER
+
+## Where a defender wants to be this frame: on the point if it's threatened, else at its post.
+func _get_defender_destination(delta: float) -> Vector3:
+	var point = _target_point_ref
+	var under_attack = point.attackers_on_point > 0 or point.capture_progress > 0.0
+	var critical = point.capture_progress >= 50.0
+
+	var contest = false
+	match defend_role:
+		DefendRole.ANCHOR, DefendRole.HOLDER:
+			contest = under_attack   # Step in as soon as attackers touch the point
+		DefendRole.FORWARD:
+			contest = critical       # Skirmishers only fall back when it's getting serious
+
+	if contest:
+		_defender_at_post = false
+		return _current_point_target
+
+	# Holding: non-anchors drift to a fresh post now and then so they aren't sitting ducks
+	_defender_at_post = true
+	if defend_role != DefendRole.ANCHOR:
+		_post_timer -= delta
+		if _post_timer <= 0.0:
+			_choose_guard_post()
+	return _guard_post
+
+## Picks a spot around the active point for this bot's role: on the navmesh,
+## and never inside the attackers' spawn zone. Falls back to standing on the point.
+func _choose_guard_post():
+	var point = _target_point_ref
+	if not is_instance_valid(point):
+		return
+	var center = point.global_position
+
+	var radius: Vector2
+	match defend_role:
+		DefendRole.ANCHOR: radius = anchor_radius
+		DefendRole.FORWARD: radius = forward_radius
+		_: radius = holder_radius
+
+	_post_timer = randf_range(reposition_interval.x, reposition_interval.y)
+	_post_facing = GameManager.get_attacker_direction(center)
+	_guard_post = _current_point_target # Fallback: stand on the point
+
+	var nav_map = nav_agent.get_navigation_map()
+	for attempt in range(8):
+		var angle = randf() * TAU
+		var r = randf_range(radius.x, radius.y)
+		var candidate = center + Vector3(cos(angle) * r, 0.0, sin(angle) * r)
+		candidate = NavigationServer3D.map_get_closest_point(nav_map, candidate)
+
+		# Snapping can drag a spot through a wall: reject if it landed far from where we wanted
+		if Vector2(candidate.x - center.x, candidate.z - center.z).length() > radius.y + 3.0:
+			continue
+		# Never hold a post inside the attackers' spawn zone
+		if GameManager.distance_to_attacker_spawn(candidate) < min_spawn_distance:
+			continue
+
+		_guard_post = candidate
+		return
+
 # NOTE: deliberately untyped. A typed parameter (t: Node3D) is checked BEFORE the
 # body runs, so passing a freed object would crash before is_instance_valid() could catch it.
 func _is_valid_target(t) -> bool:

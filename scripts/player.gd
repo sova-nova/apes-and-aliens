@@ -15,8 +15,15 @@ enum Faction { TEAM_ALPHA, TEAM_BRAVO }
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var speed: float = 5.0
-var max_health: float = 100.0
-var current_health: float
+# Health lives in a HealthComponent (the same one the bots use). These read-only
+# properties keep existing readers, like the HUD, working unchanged.
+var health_component: HealthComponent
+var current_health: float:
+	get:
+		return health_component.current_health
+var max_health: float:
+	get:
+		return health_component.max_health
 var is_alive: bool = true
 
 var last_attacker_name: String = ""
@@ -51,8 +58,15 @@ var _is_adrenaline_boosted: bool = false # <-- ADD THESE
 var _adrenaline_timer: float = 0.0
 var _is_dashing: bool = false
 var _dash_timer: float = 0.0
-var _is_invulnerable: bool = false
+var _spawn_protected: bool = false
+# Computed from its two sources, so a dash ending can't cancel spawn protection (or vice versa)
+var _is_invulnerable: bool:
+	get:
+		return _is_dashing or _spawn_protected
 var _dash_direction: Vector3 = Vector3.ZERO # <-- ADD THIS
+var _knockback_velocity: Vector3 = Vector3.ZERO
+var is_vulnerable: bool = false # Target Lock debuff: take +10% damage
+var _vulnerable_light: OmniLight3D = null
 
 @onready var camera_pivot: Node3D = $CameraPivot
 @onready var camera_3d: Camera3D = $CameraPivot/SpringArm3D/Camera3D
@@ -68,6 +82,13 @@ signal class_changed(new_class_name: String)
 
 
 func _ready():
+	# Created here (not in player.tscn) so the scene needs no edits
+	health_component = HealthComponent.new()
+	health_component.name = "HealthComponent"
+	add_child(health_component)
+	health_component.health_changed.connect(_on_health_changed)
+	health_component.died.connect(_on_health_died)
+
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	aim_ray.add_exception(self)
 	add_to_group("players")
@@ -87,8 +108,8 @@ func apply_class():
 		
 	# Apply Stats
 	speed = character_class.move_speed
-	max_health = character_class.max_health
-	current_health = max_health # Refill health on class swap
+	health_component.max_health = character_class.max_health
+	health_component.revive() # Refill health on class swap (also tells the HUD)
 	_is_overcharged = false
 	current_ammo = character_class.mag_size
 	max_ammo = character_class.mag_size
@@ -104,7 +125,7 @@ func apply_class():
 	
 	# Tell the HUD to update
 	class_changed.emit(character_class.class_name_str)
-	health_changed.emit(current_health, max_health)
+	health_changed.emit(health_component.current_health, health_component.max_health)
 
 func _unhandled_input(event: InputEvent):
 	if event is InputEventMouseMotion:
@@ -227,7 +248,6 @@ func _physics_process(delta: float):
 		
 		if _dash_timer <= 0.0:
 			_is_dashing = false
-			_is_invulnerable = false
 			
 	elif _is_grappling:
 		_grapple_timer -= delta
@@ -238,9 +258,18 @@ func _physics_process(delta: float):
 		# Stop grappling if we get close to the target, or time runs out
 		if global_position.distance_to(_grapple_target) < 1.5 or _grapple_timer <= 0.0:
 			_is_grappling = false
-			
+
+	elif _knockback_velocity.length() > 0.1:
+		# Shoved: the push decays over time, and you keep a little steering (30%)
+		var steer_input := Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
+		var steer := transform.basis * Vector3(steer_input.x, 0, steer_input.y)
+		velocity.x = _knockback_velocity.x + steer.x * speed * 0.3
+		velocity.z = _knockback_velocity.z + steer.z * speed * 0.3
+		_knockback_velocity = _knockback_velocity.move_toward(Vector3.ZERO, delta * 20.0)
+
 	else:
-		# Standard WASD Movement (Only runs if NOT dashing or grappling)
+		_knockback_velocity = Vector3.ZERO
+		# Standard WASD Movement (Only runs if NOT dashing, grappling, or being shoved)
 		var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
 		var direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 		
@@ -463,32 +492,83 @@ func _use_ability(slot: int):
 			_life_siphon()
 
 func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = ""):
-	if _is_invulnerable:
-		return # Can't take damage while dashing!
-		
+	if _is_invulnerable or not is_alive:
+		return # Dash i-frames, spawn protection, or already dead
+
 	# Remember who shot us!
 	if attacker_name != "":
 		last_attacker_name = attacker_name
-		
+
 	# Apply damage reduction multiplier (1.0 normal, 0.5 if Bulwark is active)
 	var final_damage = amount * _damage_reduction_multiplier
-	
-	current_health = max(0.0, current_health - final_damage)
-	health_changed.emit(current_health, max_health)
-	
-	# Interactions
+
+	# Target Lock debuff: +10% from every source
+	if is_vulnerable:
+		final_damage *= 1.1
+
+	# Feedback first: if this hit kills us, death disables processing and would freeze the shake tween
 	AudioManager.play_hit(global_position)
 	_apply_screen_shake(0.2)
-	
-	if current_health <= 0.0:
-		died.emit()
-		_handle_death()
+
+	# The HealthComponent clamps health, tells the HUD, and fires died exactly once
+	health_component.take_damage(final_damage)
+
+## Called by enemy abilities (e.g. a bot's Shockwave). Horizontal part decays, vertical part is a one-shot hop.
+func apply_knockback(force: Vector3):
+	if not is_alive or _is_invulnerable:
+		return # Dashing and spawn protection dodge it
+	_is_grappling = false # A shove breaks a grapple
+	_knockback_velocity = Vector3(force.x, 0.0, force.z)
+	velocity.y = maxf(velocity.y, force.y)
+
+## Called by enemy Target Lock. While set, we take +10% damage and wear an orange light overhead.
+func set_vulnerable(state: bool):
+	if is_vulnerable == state:
+		return
+	is_vulnerable = state
+
+	if state:
+		_vulnerable_light = OmniLight3D.new()
+		_vulnerable_light.light_color = Color.ORANGE
+		_vulnerable_light.light_energy = 3.0
+		_vulnerable_light.omni_range = 3.0
+		_vulnerable_light.position = Vector3(0, 1.5, 0)
+		add_child(_vulnerable_light)
+	elif is_instance_valid(_vulnerable_light):
+		_vulnerable_light.queue_free()
+		_vulnerable_light = null
+
+func _on_health_changed(new_health: float, new_max: float):
+	health_changed.emit(new_health, new_max) # Keep the HUD-facing signal on the player
+
+func _on_health_died():
+	died.emit()
+	_handle_death()
+
+## Effects tick on physics timers, which freeze while we're dead (process disabled).
+## Cancel them on death so nothing lingers: enemies stay marked, tethers hang, a dash resumes.
+func _reset_combat_state():
+	if _is_target_locking:
+		_end_target_lock()
+	if _is_siphoning:
+		_end_siphon()
+	set_vulnerable(false)
+
+	_is_dashing = false
+	_is_grappling = false
+	_is_adrenaline_boosted = false
+	_is_bulwark_active = false
+	_damage_reduction_multiplier = 1.0
+	_is_overcharged = false
+	if gun_model:
+		gun_model.material_override = null
+	_knockback_velocity = Vector3.ZERO
+	velocity = Vector3.ZERO
 
 # --- Specific Ability Implementations ---
 
 func _phase_dash():
 	_is_dashing = true
-	_is_invulnerable = true
 	_dash_timer = 0.25 # Increased from 0.2 to 0.25 for a longer dash distance
 	
 	# Determine dash direction based on current input
@@ -539,8 +619,7 @@ func _end_overcharge():
 func _adrenaline_spike():
 	# 1. Cost 20 HP. We clamp it to 1 HP so you can't accidentally kill yourself with it.
 	var hp_cost = 20.0
-	current_health = max(1.0, current_health - hp_cost)
-	health_changed.emit(current_health, max_health)
+	health_component.current_health = maxf(1.0, health_component.current_health - hp_cost)
 	
 	# 2. Reset Cooldowns for Dash (Slot 0) and Overcharge (Slot 1)
 	ability_cooldowns[0] = 0.0
@@ -604,7 +683,7 @@ func _deploy_cover():
 	wall.add_child(col)
 	wall.add_child(mesh_inst)
 	get_tree().root.add_child(wall) # Add to the tree BEFORE setting global_position
-
+	
 	# 4. Position it so the bottom touches the floor
 	wall.global_position = target_position + Vector3.UP * (wall_height / 2.0)
 	
@@ -791,8 +870,7 @@ func _siphon_tick():
 		_siphon_target.take_damage(siphon_damage, faction)
 		
 	# Heal self
-	current_health = min(max_health, current_health + siphon_heal)
-	health_changed.emit(current_health, max_health)
+	health_component.heal(siphon_heal)
 	
 	# Reset tick timer
 	_siphon_tick_timer = 0.5
@@ -815,6 +893,7 @@ func _end_siphon():
 func _handle_death():
 	is_alive = false
 	$CollisionShape3D.disabled = true
+	_reset_combat_state()
 	
 	# Broadcast Kill to HUD
 	var my_name = character_class.class_name_str if character_class else "Player"
@@ -828,11 +907,18 @@ func _handle_death():
 func _respawn():
 	is_alive = true
 	$CollisionShape3D.disabled = false # Re-enable our physical body
-	current_health = max_health
+	health_component.revive() # Full health, and tells the HUD
 	visible = true
 	process_mode = Node.PROCESS_MODE_INHERIT
-	
-	# Ask GameManager where we spawn right now (follows capture progress)
+
+	# A fresh life: full mag, ready weapon, fresh cooldowns
+	current_ammo = max_ammo
+	is_reloading = false
+	_can_shoot = true
+	_shoot_cooldown = 0.0
+	ability_cooldowns = [0.0, 0.0, 0.0]
+
+	# Spawn where our team spawns right now (follows capture progress)
 	var spawn_pos = GameManager.get_spawn_position(faction)
 	global_position = spawn_pos if spawn_pos.is_finite() else Vector3(0, 1.25, 0)
 
@@ -842,11 +928,9 @@ func _respawn():
 		dir.y = 0.0
 		if dir.length_squared() > 0.01:
 			rotation.y = atan2(-dir.x, -dir.z)
-		
-	health_changed.emit(current_health, max_health)
-	
+
 	# --- Spawn Protection ---
-	_is_invulnerable = true
+	_spawn_protected = true
 	var shield_mat = StandardMaterial3D.new()
 	shield_mat.albedo_color = Color(1, 1, 1, 0.5) # Semi-transparent
 	shield_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -857,7 +941,7 @@ func _respawn():
 	# Remove shield after 2 seconds
 	get_tree().create_timer(2.0).timeout.connect(func():
 		if is_instance_valid(self) and is_node_ready():
-			_is_invulnerable = false
+			_spawn_protected = false
 			if not _is_dashing and not _is_siphoning: # Don't override other ability visuals
 				$MeshInstance3D.material_override = null
 	)

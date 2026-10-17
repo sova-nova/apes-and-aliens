@@ -8,7 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://cvq7f1peo50ul" path="res://assets/pillar_a.tscn" id="6_1ainy"]
 [ext_resource type="PackedScene" uid="uid://bko0i4keu1itk" path="res://assets/crate_a.tscn" id="7_n6hdu"]
 [ext_resource type="PackedScene" uid="uid://bet5fxbqdej7s" path="res://capture_gate.tscn" id="8_km5ld"]
-[ext_resource type="Script" uid="uid://ckbo10bguubni" path="res://forward_spawn.gd" id="9_i2t4f"]
+[ext_resource type="Script" uid="uid://ban88wahdqdyp" path="res://scripts/forward_spawn.gd" id="9_i2t4f"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_vonw3"]
 size = Vector3(50, 1, 120)
