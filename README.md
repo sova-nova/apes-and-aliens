@@ -56,7 +56,7 @@ Settings are saved automatically in your user data folder.
 
 ## Build from source
 
-1. Install [Godot](https://godotengine.org/) **4.5**.
+1. Install [Godot](https://godotengine.org/) **4.5.1**.
 2. Clone this repository and open `project.godot` in the editor.
 3. Press **F5** to run.
 
@@ -81,7 +81,7 @@ Handy places to tune the game:
 
 - Built with the [Godot Engine](https://godotengine.org/) (MIT license).
 - Placeholder sound effects (abilities, countdown, jingles, and so on) are synthesized by `tools/make_sfx.py`.
-- The shoot, hit, capture, and Bulwark sounds: *add the source and license here.*
+- The shoot, hit, capture, and Bulwark sounds: (https://kenney.nl/assets/sci-fi-sounds) (https://creativecommons.org/publicdomain/zero/1.0/)
 
 ## License
 
