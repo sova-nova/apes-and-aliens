@@ -74,7 +74,7 @@ Keep it short. Write **decisions**, not wishes, and mark each as:
 - **Weapons:** *(Class-locked weapons only? Unlocks? Attachments?)*
  - TF2 sort of system, with fast or low damage weapons being hitscan, and high impact weapons usually being projectiles. Start with each character having one weapon. We can add variants later on. Class locked weapons.
 - **Balance philosophy:** *(Target time-to-kill, how much skill vs. ability vs. luck, what counts as "too strong".)*
- - No target time to kill yet. Rock paper scissors type matchups, with skill being prioritized heavily over luck. Undecided on what is too strong.
+ - No target time to kill yet. Rock paper scissors type matchups, with skill being prioritized a little more than luck. Undecided on what is too strong.
 - **Movement:** *(Jump, slide, climb? Speed and how forgiving it is.)*
  - Jump, no slide, possible climb for certain characters. I don't want characters to be incredibly fast. Characters have speeds similar to TF2. 
 
