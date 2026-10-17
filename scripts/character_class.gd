@@ -44,3 +44,53 @@ enum AbilityType {
 ## A bot that newly spots an enemy waits a random time in this range before its first shot.
 @export var bot_reaction_min: float = 0.3
 @export var bot_reaction_max: float = 0.5
+
+# ─── Display info ───────────────────────────────────────────
+## Names and one-line descriptions for every ability, shared by class select and the HUD.
+## The numbers in the text mirror the values in player.gd and bot.gd:
+## if you retune an ability, update its line here too.
+const ABILITY_INFO := {
+	AbilityType.NONE: {"name": "None", "desc": ""},
+	AbilityType.PHASE_DASH: {
+		"name": "Phase Dash",
+		"desc": "Burst forward in the direction you move. Untouchable while dashing.",
+	},
+	AbilityType.OVERCHARGE: {
+		"name": "Overcharge",
+		"desc": "4s of +50% damage and double fire rate, but you move at half speed.",
+	},
+	AbilityType.ADRENALINE_SPIKE: {
+		"name": "Adrenaline Spike",
+		"desc": "Costs 20 HP. Refreshes your first two abilities and speeds you up for 2s.",
+	},
+	AbilityType.DEPLOY_COVER: {
+		"name": "Deploy Cover",
+		"desc": "Raise a wall where you aim for 6s. It blocks enemies; your team fires through it.",
+	},
+	AbilityType.BULWARK: {
+		"name": "Bulwark",
+		"desc": "4s of 50% damage reduction.",
+	},
+	AbilityType.SHOCKWAVE: {
+		"name": "Shockwave",
+		"desc": "Blast enemies within 5m away from you and into the air.",
+	},
+	AbilityType.GRAPPLE_HOOK: {
+		"name": "Grapple Hook",
+		"desc": "Yank yourself toward the spot you're aiming at.",
+	},
+	AbilityType.TARGET_LOCK: {
+		"name": "Target Lock",
+		"desc": "Mark an enemy for 5s: you deal +30% to them, and they take +10% from everyone.",
+	},
+	AbilityType.LIFE_SIPHON: {
+		"name": "Life Siphon",
+		"desc": "Tether an enemy within 10m for 3s, draining their health into yours.",
+	},
+}
+
+static func ability_name(type: int) -> String:
+	return ABILITY_INFO.get(type, ABILITY_INFO[AbilityType.NONE])["name"]
+
+static func ability_desc(type: int) -> String:
+	return ABILITY_INFO.get(type, ABILITY_INFO[AbilityType.NONE])["desc"]

@@ -181,7 +181,7 @@ func apply_knockback(force: Vector3):
 	_knockback_velocity = Vector3(force.x, 0.0, force.z)
 	velocity.y = maxf(velocity.y, force.y)
 
-func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = ""):
+func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = "", _source_pos: Vector3 = Vector3.INF):
 	if health_component.is_dead():
 		return
 	if _is_invulnerable:
@@ -595,7 +595,7 @@ func _attack(target: Node3D):
 			var damage = attack_damage * _damage_multiplier * GameSettings.bot_damage_mult(faction)
 			if hit == _locked_target:
 				damage *= 1.3 # Target Lock bonus, same as the player's version
-			hit.take_damage(damage, faction, my_name)
+			hit.take_damage(damage, faction, my_name, global_position)
 
 	# Tracer on every shot, so you can SEE bots miss
 	CombatFx.tracer(self, origin, end_point, Color.RED, 0.05, 0.05)
@@ -667,6 +667,7 @@ func _should_use(type: int, health_pct: float, dist: float, los: bool, has_targe
 
 func _use_ability(slot: int, type: int, target: Node3D):
 	ability_cooldowns[slot] = _get_slot_cooldown(slot)
+	AudioManager.play_ability(type, global_position) # Heard from where the bot is
 	match type:
 		CharacterClass.AbilityType.PHASE_DASH: _bot_dash(target)
 		CharacterClass.AbilityType.OVERCHARGE: _bot_overcharge()
@@ -786,7 +787,6 @@ func _bot_deploy_cover(target: Node3D):
 
 func _bot_bulwark():
 	_bulwark_left = 4.0
-	AudioManager.play_bulwark(global_position)
 	_flash_color(Color.DODGER_BLUE, 0.4)
 
 func _bot_shockwave():
@@ -857,7 +857,7 @@ func _tick_siphon(delta: float):
 	if _siphon_tick_timer <= 0.0:
 		_siphon_tick_timer = 0.5
 		var my_name = character_class.class_name_str if character_class else "Bot"
-		_siphon_target.take_damage(8.0, faction, my_name)
+		_siphon_target.take_damage(8.0, faction, my_name, global_position)
 		health_component.heal(8.0)
 		update_health_bar()
 

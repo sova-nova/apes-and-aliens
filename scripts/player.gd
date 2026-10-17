@@ -82,6 +82,8 @@ signal died
 signal ability_status_changed(slot: int, is_ready: bool, time_left: float)
 signal class_changed(new_class_name: String)
 signal ammo_changed(current: int, max_ammo: int, is_reloading: bool)
+## Emitted when something hurts us: angle is clockwise from straight ahead (0 = front, PI/2 = right, PI = behind).
+signal damage_taken(angle: float)
 
 
 func _ready():
@@ -126,6 +128,7 @@ func apply_class():
 		
 	# Reset Cooldowns
 	ability_cooldowns = [0.0, 0.0, 0.0]
+	_last_ability_shown = [-2.0, -2.0, -2.0] # So the HUD refreshes, without an "ability ready" pip
 	_shoot_cooldown = 0.0
 	
 	# Tell the HUD to update
@@ -295,6 +298,9 @@ func _physics_process(delta: float):
 		# down, or the flip to ready (-1 marks "ready", so that flip is always seen).
 		var shown = snappedf(ability_cooldowns[i], 0.1) if ability_cooldowns[i] > 0.0 else -1.0
 		if shown != _last_ability_shown[i]:
+			# Just finished cooling down? (-2 means "nothing sent yet", so no pip when a life or match starts)
+			if shown == -1.0 and _last_ability_shown[i] >= 0.0:
+				AudioManager.play_ability_ready()
 			_last_ability_shown[i] = shown
 			ability_status_changed.emit(i, ability_cooldowns[i] <= 0.0, ability_cooldowns[i])
 		
@@ -368,7 +374,11 @@ func shoot():
 				if collider.has_method("spawn_damage_number"):
 					collider.spawn_damage_number(current_gun_damage)
 				
-				HUD.show_hit_marker()
+				# Did that shot kill? Gold marker and a ding, so a kill reads differently from a hit
+				var killed = "health_component" in collider and collider.health_component.is_dead()
+				HUD.show_hit_marker(killed)
+				if killed:
+					AudioManager.play_kill_confirm()
 
 		CombatFx.spark(self, end_point, normal)
 	else:
@@ -422,6 +432,7 @@ func _use_ability(slot: int):
 			return # Too far away! Cancel the ability, no cooldown penalty.
 		
 	ability_cooldowns[slot] = cooldown_time
+	AudioManager.play_ability(ability_type, global_position)
 	
 	# Route to the correct function
 	match ability_type:
@@ -434,7 +445,6 @@ func _use_ability(slot: int):
 		CharacterClass.AbilityType.DEPLOY_COVER:
 			_deploy_cover()
 		CharacterClass.AbilityType.BULWARK:
-			AudioManager.play_bulwark(global_position)
 			_bulwark_ability()
 		CharacterClass.AbilityType.SHOCKWAVE:
 			_shockwave()
@@ -445,7 +455,7 @@ func _use_ability(slot: int):
 		CharacterClass.AbilityType.LIFE_SIPHON:
 			_life_siphon()
 
-func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = ""):
+func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = "", source_pos: Vector3 = Vector3.INF):
 	if _is_invulnerable or not is_alive:
 		return # Dash i-frames, spawn protection, or already dead
 
@@ -463,9 +473,24 @@ func take_damage(amount: float, _source_faction: int = -1, attacker_name: String
 	# Feedback first: if this hit kills us, death disables processing and would freeze the shake tween
 	AudioManager.play_hit(global_position)
 	_apply_screen_shake(0.2)
+	_notify_damage_direction(source_pos)
 
 	# The HealthComponent clamps health, tells the HUD, and fires died exactly once
 	health_component.take_damage(final_damage)
+
+## Tells the HUD which way the hit came from, relative to where we're facing.
+func _notify_damage_direction(source_pos: Vector3):
+	if not source_pos.is_finite():
+		return # Unknown source (e.g. an effect with no position)
+	var to_source = source_pos - global_position
+	to_source.y = 0.0
+	if to_source.length_squared() < 0.01:
+		return
+	var forward = -global_transform.basis.z
+	forward.y = 0.0
+	# signed_angle_to is positive toward our LEFT when viewed from above; screen angles are
+	# clockwise-positive (right = +), so flip the sign.
+	damage_taken.emit(-forward.signed_angle_to(to_source, Vector3.UP))
 
 ## Called by enemy abilities (e.g. a bot's Shockwave). Horizontal part decays, vertical part is a one-shot hop.
 func apply_knockback(force: Vector3):
@@ -847,6 +872,7 @@ func _respawn():
 	is_alive = true
 	$CollisionShape3D.disabled = false # Re-enable our physical body
 	health_component.revive() # Full health, and tells the HUD
+	AudioManager.play_respawn()
 	visible = true
 	process_mode = Node.PROCESS_MODE_INHERIT
 
@@ -856,6 +882,7 @@ func _respawn():
 	_can_shoot = true
 	_shoot_cooldown = 0.0
 	ability_cooldowns = [0.0, 0.0, 0.0]
+	_last_ability_shown = [-2.0, -2.0, -2.0] # So the HUD refreshes, without an "ability ready" pip
 
 	# Spawn where our team spawns right now (follows capture progress)
 	var spawn_pos = GameManager.get_spawn_position(faction)

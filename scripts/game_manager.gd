@@ -174,15 +174,19 @@ func initialize_level():
 func start_match_countdown():
 	var run_id = _match_run_id
 	match_state_changed.emit("3")
+	AudioManager.play_countdown_tick()
 	await get_tree().create_timer(1.0, false).timeout
 	if run_id != _match_run_id: return
 	match_state_changed.emit("2")
+	AudioManager.play_countdown_tick()
 	await get_tree().create_timer(1.0, false).timeout
 	if run_id != _match_run_id: return
 	match_state_changed.emit("1")
+	AudioManager.play_countdown_tick()
 	await get_tree().create_timer(1.0, false).timeout
 	if run_id != _match_run_id: return
 	match_state_changed.emit("GO!")
+	AudioManager.play_countdown_go()
 	await get_tree().create_timer(0.5, false).timeout
 	if run_id != _match_run_id: return
 	match_state_changed.emit("PLAYING")

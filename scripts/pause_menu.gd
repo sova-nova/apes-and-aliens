@@ -46,6 +46,17 @@ func _ready() -> void:
 	_add_button(box, "Settings", _open_settings)
 	_add_button(box, "Quit to Main Menu", _quit_to_menu)
 
+	# A controls reminder, so nobody has to guess what Q, E and Shift do
+	box.add_child(HSeparator.new())
+	var controls_title := Label.new()
+	controls_title.text = "CONTROLS"
+	controls_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls_title.modulate = Color(1, 1, 1, 0.7)
+	box.add_child(controls_title)
+	var grid := ControlsHelp.build_grid()
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(grid)
+
 func _add_button(parent: Control, text: String, callback: Callable) -> Button:
 	var button := Button.new()
 	button.text = text

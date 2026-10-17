@@ -17,6 +17,10 @@ func _ready():
 	# Which role did the player just play? (GameManager keeps the last match's roles.)
 	_player_attacked = (PlayerSetup.selected_faction == GameManager.attacking_team)
 
+	# A short jingle: victory or defeat from the player's point of view
+	if winner != GameManager.TEAM_NONE:
+		AudioManager.play_round_result(winner == PlayerSetup.selected_faction)
+
 	_build_extras(winner)
 
 # Extra UI is built in code so the scene file doesn't need editing.

@@ -18,6 +18,9 @@ var _player: CharacterBody3D = null
 var _hit_tween: Tween = null
 
 func _ready():
+	_build_ability_bar()
+	_build_damage_indicator()
+
 	if GameManager:
 		GameManager.score_updated.connect(_on_score_updated)
 		GameManager.objective_updated.connect(_on_objective_updated)
@@ -39,6 +42,7 @@ func _process(_delta: float):
 			_player.ability_status_changed.connect(_on_ability_status_changed)
 			_player.class_changed.connect(_on_class_changed)
 			_player.ammo_changed.connect(_on_ammo_changed)
+			_player.damage_taken.connect(_damage_indicator.show_hit_from)
 
 			# Show the starting state right away
 			if _player.character_class:
@@ -105,19 +109,20 @@ func _on_kill_occurred(killer_name: String, victim_name: String, victim_faction:
 		tween.tween_property(label, "modulate:a", 0.0, 1.0)
 		tween.tween_callback(label.queue_free)
 
-func show_hit_marker():
+func show_hit_marker(is_kill: bool = false):
 	if crosshair:
 		if _hit_tween and _hit_tween.is_running():
 			_hit_tween.kill()
-			
+
+		# A kill gets a gold, longer-lasting marker so it reads differently from an ordinary hit
 		crosshair.text = "X"
-		crosshair.add_theme_color_override("font_color", Color.RED)
-		
+		crosshair.add_theme_color_override("font_color", Color.GOLD if is_kill else Color.RED)
+
 		_hit_tween = create_tween()
-		_hit_tween.tween_interval(0.12)
+		_hit_tween.tween_interval(0.25 if is_kill else 0.12)
 		_hit_tween.tween_callback(func(): crosshair.text = "+")
 		_hit_tween.tween_callback(func(): crosshair.add_theme_color_override("font_color", Color.WHITE))
-		
+
 func _on_ammo_changed(current: int, max_ammo: int, is_reloading: bool):
 	if not ammo_label: return
 	if is_reloading:
@@ -165,34 +170,119 @@ func _find_player() -> CharacterBody3D:
 		return players[0]
 	return null
 	
-# Ability readout state. The label is rebuilt once per frame, and only when something changed.
+# ─── Ability bar ────────────────────────────────────────────
+# Three slots along the bottom: key, name, a recharge bar, and the seconds left while cooling down.
+const ABILITY_KEYS := ["Q", "E", "Shift"]
+
 var _ability_timers: Array = [0.0, 0.0, 0.0]
 var _ability_ready: Array = [true, true, true]
-var _ability_dirty: bool = false
-var _first_ability_was_ready: bool = false # So the color override is only touched when it flips
+var _ability_dirty: bool = false  # The bar is refreshed at most once per frame, and only when this is set
+var _slots: Array = []            # One Dictionary per ability slot: {panel, time, title, bar}
+var _damage_indicator: DamageIndicator
+
+func _build_ability_bar() -> void:
+	if ability_label:
+		ability_label.visible = false # The bar replaces the old text readout
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override("margin_bottom", 22)
+	add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.alignment = BoxContainer.ALIGNMENT_END # Sit at the bottom of the screen
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(column)
+
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(row)
+
+	for i in range(3):
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(124, 0)
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(panel)
+
+		var inner := VBoxContainer.new()
+		inner.add_theme_constant_override("separation", 2)
+		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(inner)
+
+		var top := HBoxContainer.new()
+		top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(top)
+
+		var key_label := Label.new()
+		key_label.text = ABILITY_KEYS[i]
+		key_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+		key_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		top.add_child(key_label)
+
+		var time_label := Label.new()
+		time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		top.add_child(time_label)
+
+		var title_label := Label.new()
+		title_label.add_theme_font_size_override("font_size", 14)
+		inner.add_child(title_label)
+
+		var bar := ProgressBar.new()
+		bar.min_value = 0.0
+		bar.max_value = 1.0
+		bar.value = 1.0
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(0, 8)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(bar)
+
+		_slots.append({"panel": panel, "time": time_label, "title": title_label, "bar": bar})
+
+func _build_damage_indicator() -> void:
+	_damage_indicator = DamageIndicator.new()
+	add_child(_damage_indicator) # Added last, so it draws above everything else
+
+## Fills in each slot's ability name from the player's class (and hides slots with no ability).
+func _update_ability_names() -> void:
+	if _slots.is_empty() or not is_instance_valid(_player) or not _player.character_class:
+		return
+	var c = _player.character_class
+	var types := [c.ability_1_type, c.ability_2_type, c.ability_3_type]
+	for i in range(3):
+		_slots[i].panel.visible = types[i] != CharacterClass.AbilityType.NONE
+		_slots[i].title.text = CharacterClass.ability_name(types[i])
+
+func _ability_total_cooldown(slot: int) -> float:
+	if not is_instance_valid(_player) or not _player.character_class:
+		return 1.0
+	var c = _player.character_class
+	match slot:
+		0: return c.ability_1_cooldown
+		1: return c.ability_2_cooldown
+	return c.ability_3_cooldown
 
 func _on_ability_status_changed(slot: int, is_ready: bool, time_left: float):
 	_ability_timers[slot] = time_left
 	_ability_ready[slot] = is_ready
 	_ability_dirty = true
 
-func _refresh_ability_label():
-	if not ability_label:
+func _refresh_ability_label() -> void:
+	if _slots.is_empty():
 		return
-
-	var keys = ["Q", "E", "Shift"]
-	var text_lines = []
 	for i in range(3):
-		if _ability_ready[i]:
-			text_lines.append("%s: [Ready]" % keys[i])
-		else:
-			text_lines.append("%s: [%.1f]" % [keys[i], _ability_timers[i]])
-	ability_label.text = "\n".join(text_lines)
+		var slot = _slots[i]
+		var is_ready: bool = _ability_ready[i]
+		var left: float = _ability_timers[i]
+		var total := _ability_total_cooldown(i)
 
-	# Green while the first ability is ready, white otherwise
-	if _ability_ready[0] != _first_ability_was_ready:
-		_first_ability_was_ready = _ability_ready[0]
-		ability_label.add_theme_color_override("font_color", Color.GREEN if _first_ability_was_ready else Color.WHITE)
+		slot.time.text = "" if is_ready else "%.1f" % left
+		# The bar fills as the ability recharges, and glows green once it's ready
+		slot.bar.value = 1.0 if is_ready else clampf(1.0 - left / maxf(total, 0.01), 0.0, 1.0)
+		slot.bar.modulate = Color(0.45, 1.0, 0.55) if is_ready else Color(0.6, 0.75, 1.0)
+		slot.panel.modulate = Color(1, 1, 1, 1.0 if is_ready else 0.7)
 
 func _on_objective_updated(active_point_order: int):
 	if not objective_label:
@@ -206,3 +296,5 @@ func _on_objective_updated(active_point_order: int):
 func _on_class_changed(new_class_name: String):
 	if class_label:
 		class_label.text = "Class: %s" % new_class_name
+	_update_ability_names()
+	_ability_dirty = true # Redraw the bar (new cooldown lengths)
