@@ -72,11 +72,11 @@ Keep it short. Write **decisions**, not wishes, and mark each as:
 - **Abilities:** *(Roughly how many per class? Any ones you refuse to ship?)*
  - 3 abilities per class. Unknown about refused abilities.
 - **Weapons:** *(Class-locked weapons only? Unlocks? Attachments?)*
- - Undecided on how weapons work. Let's figure that out.
+ - TF2 sort of system, with fast or low damage weapons being hitscan, and high impact weapons usually being projectiles. Start with each character having one weapon. We can add variants later on. Class locked weapons.
 - **Balance philosophy:** *(Target time-to-kill, how much skill vs. ability vs. luck, what counts as "too strong".)*
  - No target time to kill yet. Rock paper scissors type matchups, with skill being prioritized heavily over luck. Undecided on what is too strong.
 - **Movement:** *(Jump, slide, climb? Speed and how forgiving it is.)*
- - Jump, no slide, possible climb for certain characters. I don't want characters to be incredibly fast.
+ - Jump, no slide, possible climb for certain characters. I don't want characters to be incredibly fast. Characters have speeds similar to TF2. 
 
 ---
 
@@ -84,7 +84,7 @@ Keep it short. Write **decisions**, not wishes, and mark each as:
 
 | Content | At first release | Later |
 |---|---|---|
-| Classes | 4 classes per side | Up to 8 per side later |
+| Classes | 3 classes per side | Up to 6 or more per side later |
 | Maps (and their themes) | At least 3 maps to start | Want at least 8-10 later |
 | Game modes | Undecided | At least 5 |
 | Cosmetics (hats, skins, emotes) | Undecided, although receptive | Undecided as well |
@@ -132,7 +132,7 @@ Keep it short. Write **decisions**, not wishes, and mark each as:
 - **Engine:** Godot (version: ), renderer: *(Forward+ now. Confirm for the target hardware.)*
  - I have no clue what the hardware target should be.
 - **Minimum spec and performance target:** *(e.g. 60 fps on what GPU at what resolution?)*
- - No idea.
+ - Leaning: Compatibility, but focus on good mid tier play.
 - **Networking approach:** *(Godot's built-in multiplayer, a plugin, Steam networking? Authority model?)*
  - No idea.
 - **Code architecture rules:** *(e.g. "gameplay logic must not read input directly", "one place decides damage".)*
