@@ -1,0 +1,88 @@
+name: Export builds
+
+# Runs when you push a version tag such as v0.1.0, or by hand from the Actions tab.
+# It exports Windows and Linux builds, zips them, and (for tags) drafts a GitHub Release.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  export:
+    name: Export ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:${{ matrix.godot_version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # MUST match the editor you build with: Help > About in Godot (for example 4.5 or 4.5.1).
+        godot_version: ["4.5"]
+        target: [windows, linux]
+        include:
+          - target: windows
+            preset: "Windows Desktop"
+            output: build/windows/ApesVsAliens.exe
+          - target: linux
+            preset: "Linux"
+            output: build/linux/ApesVsAliens.x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Put the export templates where Godot looks for them
+        env:
+          GODOT_VERSION: ${{ matrix.godot_version }}
+        run: |
+          mkdir -v -p ~/.local/share/godot/export_templates
+          mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+
+      # .godot/ is not committed, so the import cache (and the list of class_name scripts) has to be built first
+      - name: Import the project once
+        run: godot --headless -v --import
+
+      - name: Export
+        run: |
+          mkdir -v -p "$(dirname '${{ matrix.output }}')"
+          godot --headless -v --export-release "${{ matrix.preset }}" "${{ matrix.output }}"
+
+      - name: Package
+        run: |
+          mkdir -v -p dist
+          if [ "${{ matrix.target }}" = "windows" ]; then
+            # Windows ships as an .exe plus a separate .pck, kept together in one zip
+            (cd build/windows && zip -r "$GITHUB_WORKSPACE/dist/ApesVsAliens-${GITHUB_REF_NAME}-windows.zip" .)
+          else
+            # A .tar.gz keeps the executable permission, which a zip would lose
+            chmod +x build/linux/ApesVsAliens.x86_64
+            tar -czf "dist/ApesVsAliens-${GITHUB_REF_NAME}-linux.tar.gz" -C build/linux .
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApesVsAliens-${{ matrix.target }}
+          path: dist/*
+
+  release:
+    name: Draft GitHub Release
+    needs: export
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download both builds
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # A draft, so you can look it over (and test the downloads) before publishing
+      - name: Create the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          draft: true
+          generate_release_notes: true

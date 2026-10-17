@@ -8,6 +8,7 @@ func _ready():
 	HUD.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_add_extra_buttons()
+	_add_version_label()
 	$VBoxContainer/PlayButton.grab_focus()
 
 # Settings and Quit are built in code so the scene file doesn't need editing.
@@ -26,6 +27,32 @@ func _add_extra_buttons():
 	quit_button.pressed.connect(get_tree().quit)
 	vbox.add_child(quit_button)
 	vbox.move_child(quit_button, play_index + 2)
+
+# A small "v0.1.0" in the corner, read from Project Settings > Application > Config > Version.
+# Built with the same margin-and-alignment pattern as the HUD, so it stays put at any window size.
+func _add_version_label():
+	var version = str(ProjectSettings.get_setting("application/config/version", ""))
+	if version == "":
+		return
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.alignment = BoxContainer.ALIGNMENT_END
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(column)
+
+	var label := Label.new()
+	label.text = "v" + version
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.modulate = Color(1, 1, 1, 0.5)
+	label.add_theme_font_size_override("font_size", 14)
+	column.add_child(label)
 
 func _open_settings():
 	if is_instance_valid(_settings):

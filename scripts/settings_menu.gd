@@ -56,6 +56,13 @@ func _ready() -> void:
 	_volume_label = volume.label
 	_volume_label.text = "%d%%" % int(round(GameSettings.master_volume * 100.0))
 
+	# Fullscreen
+	var fullscreen_check := CheckButton.new()
+	fullscreen_check.text = "Fullscreen"
+	fullscreen_check.button_pressed = GameSettings.fullscreen # Set before connecting, so it doesn't fire
+	fullscreen_check.toggled.connect(_on_fullscreen_toggled)
+	box.add_child(fullscreen_check)
+
 	# Difficulty
 	var diff_row := HBoxContainer.new()
 	box.add_child(diff_row)
@@ -125,6 +132,10 @@ func _on_volume_changed(value: float) -> void:
 	GameSettings.master_volume = value
 	GameSettings.apply_audio()
 	_volume_label.text = "%d%%" % int(round(value * 100.0))
+
+func _on_fullscreen_toggled(on: bool) -> void:
+	GameSettings.fullscreen = on
+	GameSettings.apply_video()
 
 func _on_difficulty_selected(index: int) -> void:
 	GameSettings.difficulty = _difficulty_option.get_item_id(index)

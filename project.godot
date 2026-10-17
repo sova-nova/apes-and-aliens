@@ -11,9 +11,10 @@ config_version=5
 [application]
 
 config/name="Apes-and-Aliens"
+config/version="0.1.0"
 run/main_scene="uid://dy8ke0r838of0"
 config/features=PackedStringArray("4.5", "Forward Plus")
-config/icon="res://icon.svg"
+config/icon="uid://cgfdwlj3kstjr"
 
 [autoload]
 
@@ -22,6 +23,11 @@ GameManager="*res://scripts/game_manager.gd"
 BotManager="*res://scripts/bot_manager.gd"
 PlayerSetup="*res://scripts/player_setup.gd"
 AudioManager="*res://scripts/audio_manager.gd"
+
+[display]
+
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [editor]
 

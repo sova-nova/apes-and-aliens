@@ -30,6 +30,8 @@ static var mouse_sensitivity_scale: float = 1.0
 # Master volume, 0.0 (muted) to 1.0
 static var master_volume: float = 1.0
 static var difficulty: int = Difficulty.NORMAL
+# Borderless fullscreen (false = a normal window)
+static var fullscreen: bool = false
 
 static var _loaded: bool = false
 
@@ -47,14 +49,21 @@ static func load_settings() -> void:
 		mouse_sensitivity_scale = clampf(float(cfg.get_value("controls", "sensitivity", 1.0)), 0.2, 3.0)
 		master_volume = clampf(float(cfg.get_value("audio", "master_volume", 1.0)), 0.0, 1.0)
 		difficulty = clampi(int(cfg.get_value("game", "difficulty", Difficulty.NORMAL)), Difficulty.EASY, Difficulty.HARD)
+		fullscreen = bool(cfg.get_value("video", "fullscreen", false))
 	apply_audio()
+	apply_video()
 
 static func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("controls", "sensitivity", mouse_sensitivity_scale)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("game", "difficulty", difficulty)
+	cfg.set_value("video", "fullscreen", fullscreen)
 	cfg.save(SAVE_PATH)
+
+static func apply_video() -> void:
+	DisplayServer.window_set_mode(
+		DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 
 static func apply_audio() -> void:
 	var bus := AudioServer.get_bus_index("Master")
