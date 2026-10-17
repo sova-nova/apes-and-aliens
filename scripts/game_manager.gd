@@ -34,6 +34,20 @@ var time_bonus_per_capture: float = 60.0
 var is_match_playing: bool = false
 var is_overtime: bool = false
 
+# ─── Match stats (the scoreboard) ───────────────────────────
+const SCORE_KILL := 100
+const SCORE_ASSIST := 40
+const SCORE_CAPTURE := 250             # Everyone standing on the point when it falls
+const SCORE_PER_OBJECTIVE_SECOND := 8.0  # Time spent capturing, or defending a point under attack
+const ASSIST_WINDOW := 8.0             # Damage dealt to a victim this recently (seconds) can earn an assist...
+const ASSIST_MIN_DAMAGE := 20.0        # ...if it added up to at least this much
+
+# One entry per player/bot, keyed by their stats_id. It outlives the match, so the
+# round-end screen can show it. Entry fields: see register_combatant().
+var stats: Dictionary = {}
+var _damage_log: Dictionary = {} # victim id -> Array of {attacker, amount, time}
+var _match_clock: float = 0.0    # Counts up while a match is playing (and pauses with the game)
+
 # Bumped when a match starts or is aborted. Countdown and end-of-match timers remember the
 # value they started with, so a stale one can't start or end a match that has since been
 # restarted or quit.
@@ -109,10 +123,146 @@ func distance_to_attacker_spawn(pos: Vector3) -> float:
 		best = minf(best, d)
 	return best
 
+# ─── Stats API ──────────────────────────────────────────────
+func _reset_stats() -> void:
+	stats.clear()
+	_damage_log.clear()
+	_match_clock = 0.0
+
+## Adds a player or bot to the scoreboard (or refreshes its name/class if it's already there,
+## which is how a bot that respawns keeps its row).
+func register_combatant(id: String, display_name: String, team: int, class_title: String = "") -> void:
+	if id == "":
+		return
+	if not stats.has(id):
+		stats[id] = {
+			"name": display_name, "team": team, "class": class_title,
+			"kills": 0, "deaths": 0, "assists": 0, "damage": 0.0, "captures": 0,
+			"shots": 0, "hits": 0, "streak": 0, "best_streak": 0, "objective_time": 0.0,
+		}
+	else:
+		stats[id]["name"] = display_name
+		stats[id]["team"] = team
+		stats[id]["class"] = class_title
+
+## `amount` is the damage that actually landed (already reduced by shields, and capped at the
+## victim's remaining health, so overkill doesn't inflate the total).
+func report_damage(victim_id: String, attacker_id: String, amount: float) -> void:
+	if victim_id == "" or attacker_id == "" or attacker_id == victim_id or amount <= 0.0:
+		return
+	if stats.has(attacker_id):
+		stats[attacker_id]["damage"] += amount
+	if not _damage_log.has(victim_id):
+		_damage_log[victim_id] = []
+	var entries: Array = _damage_log[victim_id]
+	entries.append({"attacker": attacker_id, "amount": amount, "time": _match_clock})
+	if entries.size() > 80:
+		entries.pop_front()
+
+func report_shot(shooter_id: String, hit: bool) -> void:
+	if not stats.has(shooter_id):
+		return
+	stats[shooter_id]["shots"] += 1
+	if hit:
+		stats[shooter_id]["hits"] += 1
+
+func add_objective_time(id: String, seconds: float) -> void:
+	if stats.has(id):
+		stats[id]["objective_time"] += seconds
+
+func report_capture(ids: Array) -> void:
+	for id in ids:
+		if stats.has(id):
+			stats[id]["captures"] += 1
+
+## Call when `victim_id` dies. Awards the kill and any assists, tells the kill feed,
+## and returns a summary the death screen can use.
+func report_death(victim_id: String, killer_id: String) -> Dictionary:
+	var summary := {"damage_taken": 0.0, "attacker_count": 0}
+	if not stats.has(victim_id):
+		return summary
+
+	# Everyone who hurt the victim this life, and who did so recently enough for an assist
+	var totals := {}
+	var recent := {}
+	for e in _damage_log.get(victim_id, []):
+		totals[e["attacker"]] = totals.get(e["attacker"], 0.0) + e["amount"]
+		if _match_clock - e["time"] <= ASSIST_WINDOW:
+			recent[e["attacker"]] = recent.get(e["attacker"], 0.0) + e["amount"]
+	for id in totals:
+		summary["damage_taken"] += totals[id]
+	summary["attacker_count"] = totals.size()
+
+	var victim: Dictionary = stats[victim_id]
+	victim["deaths"] += 1
+	victim["streak"] = 0
+
+	var killer_name := ""
+	if killer_id != "" and killer_id != victim_id and stats.has(killer_id):
+		var killer: Dictionary = stats[killer_id]
+		killer["kills"] += 1
+		killer["streak"] += 1
+		killer["best_streak"] = maxi(killer["best_streak"], killer["streak"])
+		killer_name = killer["name"]
+
+	for id in recent:
+		if id != killer_id and id != victim_id and recent[id] >= ASSIST_MIN_DAMAGE and stats.has(id):
+			stats[id]["assists"] += 1
+
+	_damage_log.erase(victim_id) # A fresh life starts with a clean slate
+	kill_occurred.emit(killer_name, victim["name"], victim["team"])
+	return summary
+
+## How much damage `attacker_id` has dealt to `victim_id` lately (default: the last 20 seconds).
+func get_damage_dealt_to(victim_id: String, attacker_id: String, window: float = 20.0) -> float:
+	var total := 0.0
+	for e in _damage_log.get(victim_id, []):
+		if e["attacker"] == attacker_id and _match_clock - e["time"] <= window:
+			total += e["amount"]
+	return total
+
+func get_score(id: String) -> int:
+	if not stats.has(id):
+		return 0
+	var s: Dictionary = stats[id]
+	return s["kills"] * SCORE_KILL + s["assists"] * SCORE_ASSIST + s["captures"] * SCORE_CAPTURE \
+		+ int(s["objective_time"] * SCORE_PER_OBJECTIVE_SECOND)
+
+## One team's rows, best score first. Each row is the stats entry plus id, score, and accuracy
+## (accuracy is -1.0 if they never fired).
+func get_scoreboard(team: int) -> Array:
+	var rows: Array = []
+	for id in stats:
+		var s: Dictionary = stats[id]
+		if s["team"] != team:
+			continue
+		var row: Dictionary = s.duplicate()
+		row["id"] = id
+		row["score"] = get_score(id)
+		row["accuracy"] = float(s["hits"]) / float(s["shots"]) if s["shots"] > 0 else -1.0
+		rows.append(row)
+	rows.sort_custom(func(a, b): return a["score"] > b["score"])
+	return rows
+
+## The best performer of the match (an empty Dictionary if nobody is on the board).
+func get_mvp() -> Dictionary:
+	var best := {}
+	var best_score := -1
+	for id in stats:
+		var score := get_score(id)
+		if score > best_score:
+			best_score = score
+			best = stats[id].duplicate()
+			best["id"] = id
+			best["score"] = score
+	return best
+
 # ─── Match flow ─────────────────────────────────────────────
 func _process(delta):
 	if not is_match_playing:
 		return
+
+	_match_clock += delta
 
 	if not is_overtime:
 		var previous_second = floori(match_time_left)
@@ -140,6 +290,7 @@ func _check_overtime():
 
 func initialize_level():
 	_match_run_id += 1
+	_reset_stats() # Before the await below, so bots that spawn during it are counted
 	points_captured = 0 # Fresh score every match
 	current_point_index = 0
 	capture_points.clear()

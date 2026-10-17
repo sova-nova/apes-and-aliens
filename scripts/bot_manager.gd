@@ -12,6 +12,11 @@ var bot_classes: Array[CharacterClass] = [
 
 var enemy_scene = preload("res://bot.tscn")
 
+# Bots take the first free name from their team's list, so a bot that dies and is replaced
+# keeps the same scoreboard row. (Keep each list longer than max_bots_per_team + 1.)
+const APE_NAMES := ["Koko", "Bonzo", "Mojo", "Zuri", "Tango", "Banjo", "Ziggy", "Pogo"]
+const LEGION_NAMES := ["Vex", "Glint", "Unit-7", "Zorp", "Static", "Nova", "Cinder", "Rivet"]
+
 var _spawn_timer: float = 0.0
 
 func _process(delta):
@@ -51,6 +56,7 @@ func _spawn_bot(team: int):
 	
 	var new_bot = enemy_scene.instantiate()
 	new_bot.faction = team
+	new_bot.display_name = _pick_name(team)
 	
 	# Assign a random class to the bot
 	if bot_classes.size() > 0:
@@ -61,3 +67,15 @@ func _spawn_bot(team: int):
 	
 	# 2. NOW SET THE POSITION!
 	new_bot.global_position = spawn_pos
+
+## The first name from the team's list that no living bot is using.
+func _pick_name(team: int) -> String:
+	var pool: Array = APE_NAMES if team == GameManager.TEAM_ALPHA else LEGION_NAMES
+	var in_use: Array = []
+	for bot in get_tree().get_nodes_in_group("bots"):
+		if is_instance_valid(bot) and bot.faction == team:
+			in_use.append(bot.display_name)
+	for candidate in pool:
+		if not in_use.has(candidate):
+			return candidate
+	return "%s %d" % [pool[0], in_use.size() + 1] # Only if the list runs out

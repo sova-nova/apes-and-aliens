@@ -55,6 +55,11 @@ var _current_point_target: Vector3 = Vector3.ZERO # The specific random spot we 
 
 var last_attacker_name: String = ""
 
+# Identity for the scoreboard. BotManager sets display_name before the bot enters the tree.
+var display_name: String = ""
+var stats_id: String = ""
+var _last_attacker_id: String = "" # Who hurt us last: they get the kill if we die
+
 @onready var health_component: HealthComponent = $HealthComponent
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var original_material: Material = mesh_instance.material_override if mesh_instance else null
@@ -124,6 +129,12 @@ func _ready():
 	add_to_group("bots")
 	add_to_group(GameManager.TEAM_GROUPS[faction]) # Enemies find us through this group
 	_cover_group = "cover_walls_%d" % faction
+
+	if display_name == "":
+		display_name = "Bot %d" % (get_instance_id() % 100)
+	stats_id = "%d:%s" % [faction, display_name]
+	GameManager.register_combatant(stats_id, display_name, faction,
+		character_class.class_name_str if character_class else "")
 	
 	if character_class:
 		apply_class()
@@ -181,7 +192,7 @@ func apply_knockback(force: Vector3):
 	_knockback_velocity = Vector3(force.x, 0.0, force.z)
 	velocity.y = maxf(velocity.y, force.y)
 
-func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = "", _source_pos: Vector3 = Vector3.INF):
+func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = "", _source_pos: Vector3 = Vector3.INF, attacker: Node = null):
 	if health_component.is_dead():
 		return
 	if _is_invulnerable:
@@ -195,7 +206,12 @@ func take_damage(amount: float, _source_faction: int = -1, attacker_name: String
 	# Remember who shot us!
 	if attacker_name != "":
 		last_attacker_name = attacker_name
-		
+
+	# Credit the damage (scoreboard, assists), capped at what we had left so overkill doesn't inflate it
+	if attacker != null and "stats_id" in attacker:
+		_last_attacker_id = attacker.stats_id
+		GameManager.report_damage(stats_id, attacker.stats_id, minf(final_damage, health_component.current_health))
+
 	health_component.take_damage(final_damage)
 	_flash_damage()
 	update_health_bar()
@@ -239,9 +255,8 @@ func _on_died():
 	_end_target_lock()
 	_siphon_target = null
 
-	# Broadcast Kill
-	var my_name = character_class.class_name_str if character_class else "Bot"
-	GameManager.kill_occurred.emit(last_attacker_name, my_name, faction)
+	# Awards the kill (and any assists) and tells the kill feed
+	GameManager.report_death(stats_id, _last_attacker_id)
 	
 	# Death Effect (We'll add this below)
 	CombatFx.death_debris(self, global_position, faction)
@@ -585,6 +600,7 @@ func _attack(target: Node3D):
 	query.exclude = _ray_exclude()
 	var result = space_state.intersect_ray(query)
 
+	var did_hit := false
 	if result:
 		end_point = result.position
 		# Whatever the shot actually hits takes the damage. Enemies only (no friendly fire),
@@ -595,7 +611,10 @@ func _attack(target: Node3D):
 			var damage = attack_damage * _damage_multiplier * GameSettings.bot_damage_mult(faction)
 			if hit == _locked_target:
 				damage *= 1.3 # Target Lock bonus, same as the player's version
-			hit.take_damage(damage, faction, my_name, global_position)
+			hit.take_damage(damage, faction, my_name, global_position, self)
+			did_hit = true
+
+	GameManager.report_shot(stats_id, did_hit)
 
 	# Tracer on every shot, so you can SEE bots miss
 	CombatFx.tracer(self, origin, end_point, Color.RED, 0.05, 0.05)
@@ -857,7 +876,7 @@ func _tick_siphon(delta: float):
 	if _siphon_tick_timer <= 0.0:
 		_siphon_tick_timer = 0.5
 		var my_name = character_class.class_name_str if character_class else "Bot"
-		_siphon_target.take_damage(8.0, faction, my_name, global_position)
+		_siphon_target.take_damage(8.0, faction, my_name, global_position, self)
 		health_component.heal(8.0)
 		update_health_bar()
 

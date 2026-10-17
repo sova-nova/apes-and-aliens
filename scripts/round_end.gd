@@ -34,6 +34,17 @@ func _build_extras(winner: int):
 	vbox.add_child(info)
 	vbox.move_child(info, $VBoxContainer/ResultLabel.get_index() + 1)
 
+	# The match's final scoreboard. It scrolls, so it can never push the buttons off a small screen.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(740, 260)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var board := ScoreboardPanel.new()
+	board.font_size = 14
+	board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(board)
+	vbox.add_child(scroll)
+	vbox.move_child(scroll, info.get_index() + 1)
+
 	var next_round = Button.new()
 	next_round.text = "Next Round"
 	next_round.pressed.connect(_on_next_round_pressed)
@@ -57,6 +68,15 @@ func _build_info_text(winner: int) -> String:
 			PlayerSetup.rounds_played,
 			GameManager.get_team_name(GameManager.TEAM_ALPHA), PlayerSetup.wins[GameManager.TEAM_ALPHA],
 			PlayerSetup.wins[GameManager.TEAM_BRAVO], GameManager.get_team_name(GameManager.TEAM_BRAVO)])
+
+	# Who stood out, and how you did
+	var mvp := GameManager.get_mvp()
+	if not mvp.is_empty():
+		lines.append("MVP: %s (%s)  ·  %d points" % [mvp["name"], mvp["class"], mvp["score"]])
+	var mine: Dictionary = GameManager.stats.get(ScoreboardPanel.PLAYER_ID, {})
+	if not mine.is_empty():
+		lines.append("You: %d kills  ·  %d deaths  ·  %d assists  ·  %d damage" % [
+			mine["kills"], mine["deaths"], mine["assists"], int(round(float(mine["damage"])))])
 
 	lines.append(_next_round_text())
 	return "\n".join(PackedStringArray(lines))

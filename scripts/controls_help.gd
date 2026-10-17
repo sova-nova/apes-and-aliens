@@ -10,6 +10,7 @@ const BINDINGS := [
 	["Left click", "Shoot"],
 	["R", "Reload"],
 	["Q / E / Shift", "Abilities"],
+	["Tab (hold)", "Scoreboard"],
 	["Esc", "Pause"],
 ]
 

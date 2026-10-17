@@ -15,11 +15,19 @@ extends Control
 @onready var vignette_rect: ColorRect = $VignetteRect
 
 var _player: CharacterBody3D = null
-var _hit_tween: Tween = null
+
+var _crosshair: Crosshair
+var _scoreboard_holder: Control
+var _scoreboard: ScoreboardPanel
+var _scoreboard_timer: float = 0.0
+var _death_screen: DeathScreen
 
 func _ready():
+	_build_crosshair()
 	_build_ability_bar()
 	_build_damage_indicator()
+	_build_scoreboard()
+	_build_death_screen()
 
 	if GameManager:
 		GameManager.score_updated.connect(_on_score_updated)
@@ -33,6 +41,8 @@ func _process(_delta: float):
 	if not visible:
 		return # Menus: nothing to bind or refresh
 
+	_update_scoreboard(_delta)
+
 	# (Re)bind to the player. is_instance_valid also catches a player freed by a scene reload,
 	# which a plain `if not _player` can't tell apart from a live one.
 	if not is_instance_valid(_player):
@@ -43,6 +53,9 @@ func _process(_delta: float):
 			_player.class_changed.connect(_on_class_changed)
 			_player.ammo_changed.connect(_on_ammo_changed)
 			_player.damage_taken.connect(_damage_indicator.show_hit_from)
+			_player.death_info_ready.connect(_on_player_died)
+			_player.respawned.connect(_on_player_respawned)
+			_on_player_respawned() # A new match: make sure nothing from the last death is still showing
 
 			# Show the starting state right away
 			if _player.character_class:
@@ -92,7 +105,10 @@ func _on_kill_occurred(killer_name: String, victim_name: String, victim_faction:
 	
 	var label = Label.new()
 	# Format: "Killer -> Victim"
-	label.text = "%s -> %s" % [killer_name, victim_name]
+	if killer_name == "":
+		label.text = "%s died" % victim_name
+	else:
+		label.text = "%s -> %s" % [killer_name, victim_name]
 	
 	# Color the text based on who died
 	if victim_faction == PlayerSetup.selected_faction:
@@ -110,18 +126,8 @@ func _on_kill_occurred(killer_name: String, victim_name: String, victim_faction:
 		tween.tween_callback(label.queue_free)
 
 func show_hit_marker(is_kill: bool = false):
-	if crosshair:
-		if _hit_tween and _hit_tween.is_running():
-			_hit_tween.kill()
-
-		# A kill gets a gold, longer-lasting marker so it reads differently from an ordinary hit
-		crosshair.text = "X"
-		crosshair.add_theme_color_override("font_color", Color.GOLD if is_kill else Color.RED)
-
-		_hit_tween = create_tween()
-		_hit_tween.tween_interval(0.25 if is_kill else 0.12)
-		_hit_tween.tween_callback(func(): crosshair.text = "+")
-		_hit_tween.tween_callback(func(): crosshair.add_theme_color_override("font_color", Color.WHITE))
+	if _crosshair:
+		_crosshair.flash_hit(is_kill)
 
 func _on_ammo_changed(current: int, max_ammo: int, is_reloading: bool):
 	if not ammo_label: return
@@ -240,6 +246,51 @@ func _build_ability_bar() -> void:
 		inner.add_child(bar)
 
 		_slots.append({"panel": panel, "time": time_label, "title": title_label, "bar": bar})
+
+## The drawn, customizable crosshair replaces the old "+" label.
+func _build_crosshair() -> void:
+	if crosshair:
+		crosshair.visible = false
+	_crosshair = Crosshair.new()
+	_crosshair.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_crosshair)
+
+## Hold Tab to see everyone's stats.
+func _build_scoreboard() -> void:
+	_scoreboard_holder = CenterContainer.new()
+	_scoreboard_holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scoreboard_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scoreboard_holder.visible = false
+	add_child(_scoreboard_holder)
+
+	_scoreboard = ScoreboardPanel.new()
+	_scoreboard_holder.add_child(_scoreboard)
+
+func _build_death_screen() -> void:
+	_death_screen = DeathScreen.new()
+	add_child(_death_screen)
+
+## Shows the scoreboard while Tab is held, refreshing it a few times a second.
+func _update_scoreboard(delta: float) -> void:
+	var want := Input.is_key_pressed(KEY_TAB) and not GameManager.stats.is_empty()
+	if want != _scoreboard_holder.visible:
+		_scoreboard_holder.visible = want
+		if want:
+			_scoreboard.refresh()
+			_scoreboard_timer = 0.25
+	elif want:
+		_scoreboard_timer -= delta
+		if _scoreboard_timer <= 0.0:
+			_scoreboard_timer = 0.25
+			_scoreboard.refresh()
+
+func _on_player_died(info: Dictionary) -> void:
+	_crosshair.visible = false # No crosshair while you're watching your killer
+	_death_screen.show_death(info)
+
+func _on_player_respawned() -> void:
+	_death_screen.hide_screen()
+	_crosshair.visible = true
 
 func _build_damage_indicator() -> void:
 	_damage_indicator = DamageIndicator.new()

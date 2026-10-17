@@ -26,6 +26,15 @@ var is_alive: bool = true
 
 var last_attacker_name: String = ""
 
+const RESPAWN_DELAY := 4.0 # Seconds on the death screen before we come back
+
+# Identity for the scoreboard
+var stats_id: String = "player"
+var display_name: String = "You"
+var _last_attacker_ref: WeakRef = null # The node that hurt us last (it may be gone by the time we die)
+var _last_attacker_id: String = ""
+var _death_cam: DeathCam = null
+
 var _can_shoot: bool = true
 var _shoot_cooldown: float = 0.0
 var current_ammo: int = 30
@@ -84,6 +93,9 @@ signal class_changed(new_class_name: String)
 signal ammo_changed(current: int, max_ammo: int, is_reloading: bool)
 ## Emitted when something hurts us: angle is clockwise from straight ahead (0 = front, PI/2 = right, PI = behind).
 signal damage_taken(angle: float)
+## Emitted when we die. `info` is what the death screen shows: who killed us, their health, and so on.
+signal death_info_ready(info: Dictionary)
+signal respawned
 
 
 func _ready():
@@ -134,6 +146,7 @@ func apply_class():
 	# Tell the HUD to update
 	class_changed.emit(character_class.class_name_str)
 	health_changed.emit(health_component.current_health, health_component.max_health)
+	GameManager.register_combatant(stats_id, display_name, faction, character_class.class_name_str)
 
 func _unhandled_input(event: InputEvent):
 	# Esc is handled by the PauseMenu, which also frees the mouse
@@ -334,6 +347,7 @@ func shoot():
 		return
 		
 	current_ammo -= 1
+	var did_hit := false # For the scoreboard's accuracy column
 	
 	if _is_overcharged:
 		current_fire_rate *= 0.5 # Halved cooldown = Double fire rate!
@@ -369,7 +383,8 @@ func shoot():
 					is_enemy = false # They are on our team, don't hurt them!
 			
 			if is_enemy:
-				collider.take_damage(current_gun_damage, faction, "Player")
+				collider.take_damage(current_gun_damage, faction, "Player", Vector3.INF, self)
+				did_hit = true
 				
 				if collider.has_method("spawn_damage_number"):
 					collider.spawn_damage_number(current_gun_damage)
@@ -384,6 +399,7 @@ func shoot():
 	else:
 		end_point = aim_ray.global_position + (-aim_ray.global_transform.basis.z * character_class.gun_range)
 
+	GameManager.report_shot(stats_id, did_hit)
 	CombatFx.tracer(self, origin, end_point, Color(1.0, 0.85, 0.3), 0.04, 0.06)
 
 func _flash_muzzle():
@@ -455,7 +471,7 @@ func _use_ability(slot: int):
 		CharacterClass.AbilityType.LIFE_SIPHON:
 			_life_siphon()
 
-func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = "", source_pos: Vector3 = Vector3.INF):
+func take_damage(amount: float, _source_faction: int = -1, attacker_name: String = "", source_pos: Vector3 = Vector3.INF, attacker: Node = null):
 	if _is_invulnerable or not is_alive:
 		return # Dash i-frames, spawn protection, or already dead
 
@@ -474,6 +490,13 @@ func take_damage(amount: float, _source_faction: int = -1, attacker_name: String
 	AudioManager.play_hit(global_position)
 	_apply_screen_shake(0.2)
 	_notify_damage_direction(source_pos)
+
+	# Credit the damage (scoreboard, assists), and remember who it was for the death screen.
+	# Capped at what we had left, so overkill doesn't inflate their total.
+	if attacker != null and "stats_id" in attacker:
+		_last_attacker_ref = weakref(attacker)
+		_last_attacker_id = attacker.stats_id
+		GameManager.report_damage(stats_id, attacker.stats_id, minf(final_damage, health_component.current_health))
 
 	# The HealthComponent clamps health, tells the HUD, and fires died exactly once
 	health_component.take_damage(final_damage)
@@ -831,7 +854,7 @@ func _siphon_tick():
 	
 	# Drain enemy
 	if is_instance_valid(_siphon_target) and _siphon_target.has_method("take_damage"):
-		_siphon_target.take_damage(siphon_damage, faction)
+		_siphon_target.take_damage(siphon_damage, faction, "Player", Vector3.INF, self)
 		
 	# Heal self
 	health_component.heal(siphon_heal)
@@ -859,16 +882,63 @@ func _handle_death():
 	$CollisionShape3D.disabled = true
 	_reset_combat_state()
 	
-	# Broadcast Kill to HUD
-	var my_name = character_class.class_name_str if character_class else "Player"
-	GameManager.kill_occurred.emit(last_attacker_name, my_name, faction)
+	# Who got us? This awards their kill and any assists, and tells the kill feed.
+	var killer = _get_last_attacker()
+	var summary = GameManager.report_death(stats_id, _last_attacker_id)
+	death_info_ready.emit(_build_death_info(killer, summary))
+	_start_death_cam(killer)
 	
 	visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
-	await get_tree().create_timer(3.0, false).timeout
+	await get_tree().create_timer(RESPAWN_DELAY, false).timeout
 	_respawn()
 
+func _get_last_attacker() -> Node3D:
+	if _last_attacker_ref == null:
+		return null
+	var node = _last_attacker_ref.get_ref()
+	return node if is_instance_valid(node) else null
+
+## Everything the death screen shows. `killer` may be null (e.g. they were removed already).
+func _build_death_info(killer, summary: Dictionary) -> Dictionary:
+	var info := {
+		"respawn_time": RESPAWN_DELAY,
+		"damage_taken": summary.get("damage_taken", 0.0),
+		"attacker_count": summary.get("attacker_count", 0),
+		"known_killer": false,
+	}
+	if killer != null and "stats_id" in killer:
+		var their_stats: Dictionary = GameManager.stats.get(killer.stats_id, {})
+		info["known_killer"] = true
+		info["killer_name"] = killer.display_name
+		info["killer_class"] = killer.character_class.class_name_str if killer.character_class else ""
+		info["killer_team"] = killer.faction
+		info["killer_hp"] = killer.health_component.current_health
+		info["killer_max_hp"] = killer.health_component.max_health
+		info["distance"] = global_position.distance_to(killer.global_position)
+		info["your_damage"] = GameManager.get_damage_dealt_to(killer.stats_id, stats_id)
+		info["killer_kills"] = their_stats.get("kills", 0)
+	return info
+
+# The camera swings from where we died to the enemy who killed us, and zooms in on them
+func _start_death_cam(killer) -> void:
+	if killer == null:
+		return
+	_death_cam = DeathCam.new()
+	get_tree().current_scene.add_child(_death_cam)
+	_death_cam.begin(camera_3d.global_transform, camera_3d.fov, killer)
+
+func _stop_death_cam() -> void:
+	if is_instance_valid(_death_cam):
+		camera_3d.make_current() # Hand the view back before the death camera goes away
+		_death_cam.queue_free()
+	_death_cam = null
+
 func _respawn():
+	_stop_death_cam()
+	_last_attacker_ref = null
+	_last_attacker_id = ""
+	respawned.emit()
 	is_alive = true
 	$CollisionShape3D.disabled = false # Re-enable our physical body
 	health_component.revive() # Full health, and tells the HUD

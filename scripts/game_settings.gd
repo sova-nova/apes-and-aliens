@@ -33,6 +33,16 @@ static var difficulty: int = Difficulty.NORMAL
 # Borderless fullscreen (false = a normal window)
 static var fullscreen: bool = false
 
+# Crosshair (drawn by the Crosshair control). Style is an index into Crosshair.STYLE_NAMES.
+static var crosshair_style: int = 0
+static var crosshair_color: Color = Color.WHITE
+static var crosshair_size: float = 10.0       # Length of each arm (or the circle / dot size)
+static var crosshair_thickness: float = 2.0
+static var crosshair_gap: float = 4.0         # Empty space around the exact center
+static var crosshair_opacity: float = 1.0
+static var crosshair_outline: bool = true     # A thin dark outline so it shows on any background
+static var crosshair_dot: bool = false        # An extra dot at the center
+
 static var _loaded: bool = false
 
 # ─── Loading and saving ─────────────────────────────────────
@@ -50,6 +60,16 @@ static func load_settings() -> void:
 		master_volume = clampf(float(cfg.get_value("audio", "master_volume", 1.0)), 0.0, 1.0)
 		difficulty = clampi(int(cfg.get_value("game", "difficulty", Difficulty.NORMAL)), Difficulty.EASY, Difficulty.HARD)
 		fullscreen = bool(cfg.get_value("video", "fullscreen", false))
+
+		crosshair_style = clampi(int(cfg.get_value("crosshair", "style", 0)), 0, Crosshair.STYLE_NAMES.size() - 1)
+		var hex := str(cfg.get_value("crosshair", "color", "ffffff"))
+		crosshair_color = Color.html(hex) if Color.html_is_valid(hex) else Color.WHITE
+		crosshair_size = clampf(float(cfg.get_value("crosshair", "size", 10.0)), 2.0, 30.0)
+		crosshair_thickness = clampf(float(cfg.get_value("crosshair", "thickness", 2.0)), 1.0, 8.0)
+		crosshair_gap = clampf(float(cfg.get_value("crosshair", "gap", 4.0)), 0.0, 20.0)
+		crosshair_opacity = clampf(float(cfg.get_value("crosshair", "opacity", 1.0)), 0.2, 1.0)
+		crosshair_outline = bool(cfg.get_value("crosshair", "outline", true))
+		crosshair_dot = bool(cfg.get_value("crosshair", "dot", false))
 	apply_audio()
 	apply_video()
 
@@ -59,7 +79,25 @@ static func save_settings() -> void:
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("game", "difficulty", difficulty)
 	cfg.set_value("video", "fullscreen", fullscreen)
+	cfg.set_value("crosshair", "style", crosshair_style)
+	cfg.set_value("crosshair", "color", crosshair_color.to_html(false))
+	cfg.set_value("crosshair", "size", crosshair_size)
+	cfg.set_value("crosshair", "thickness", crosshair_thickness)
+	cfg.set_value("crosshair", "gap", crosshair_gap)
+	cfg.set_value("crosshair", "opacity", crosshair_opacity)
+	cfg.set_value("crosshair", "outline", crosshair_outline)
+	cfg.set_value("crosshair", "dot", crosshair_dot)
 	cfg.save(SAVE_PATH)
+
+static func reset_crosshair() -> void:
+	crosshair_style = 0
+	crosshair_color = Color.WHITE
+	crosshair_size = 10.0
+	crosshair_thickness = 2.0
+	crosshair_gap = 4.0
+	crosshair_opacity = 1.0
+	crosshair_outline = true
+	crosshair_dot = false
 
 static func apply_video() -> void:
 	DisplayServer.window_set_mode(

@@ -16,6 +16,8 @@ var capture_progress: float = 0.0 # 0..100, always the ATTACKERS' progress
 var controlling_team: int = -1    # -1 until captured, then the attacking team
 var attackers_on_point: int = 0
 var defenders_on_point: int = 0
+var _attacker_ids: Array = [] # stats_ids of who is on the point right now (for scoreboard credit)
+var _defender_ids: Array = []
 
 # What the UI last drew, so update_ui can skip frames where nothing visible changed
 var _ui_pct: int = -1
@@ -53,6 +55,7 @@ func _physics_process(delta: float):
 		return
 
 	_count_occupants()
+	_credit_objective_time(delta)
 
 	var was_contested = is_contested
 	is_contested = attackers_on_point > 0 and defenders_on_point > 0
@@ -77,9 +80,19 @@ func _physics_process(delta: float):
 
 	update_ui()
 
+## Time spent capturing (attackers), or defending a point that is under attack (defenders), earns score.
+func _credit_objective_time(delta: float):
+	for id in _attacker_ids:
+		GameManager.add_objective_time(id, delta)
+	if attackers_on_point > 0 or capture_progress > 0.0:
+		for id in _defender_ids:
+			GameManager.add_objective_time(id, delta)
+
 func _count_occupants():
 	attackers_on_point = 0
 	defenders_on_point = 0
+	_attacker_ids.clear()
+	_defender_ids.clear()
 
 	for body in get_overlapping_bodies():
 		if not ("faction" in body):
@@ -90,10 +103,13 @@ func _count_occupants():
 		if "health_component" in body and body.health_component and body.health_component.is_dead():
 			continue
 
+		var id = body.stats_id if "stats_id" in body else ""
 		if body.faction == GameManager.attacking_team:
 			attackers_on_point += 1
+			_attacker_ids.append(id)
 		elif body.faction == GameManager.defending_team:
 			defenders_on_point += 1
+			_defender_ids.append(id)
 
 func _complete_capture():
 	is_captured = true
@@ -102,6 +118,7 @@ func _complete_capture():
 	capture_progress = 100.0
 	controlling_team = GameManager.attacking_team
 
+	GameManager.report_capture(_attacker_ids) # Everyone on the point gets the capture
 	AudioManager.play_capture()
 	update_visuals()
 	update_ui()
