@@ -22,7 +22,7 @@ var rounds_played: int = 0
 
 ## Turns the player's faction + side choice into the match's attacking team.
 func resolve_roles():
-	var other = 1 - selected_faction
+	var other = GameManager.get_opposing_team(selected_faction)
 	if side_choice == Side.ATTACK:
 		attacking_team = selected_faction
 	elif side_choice == Side.DEFEND:
@@ -37,7 +37,7 @@ func prepare_next_round(player_attacked: bool):
 
 ## Called once by GameManager when a match ends.
 func record_result(winner: int):
-	if winner == 0 or winner == 1:
+	if winner == GameManager.TEAM_ALPHA or winner == GameManager.TEAM_BRAVO:
 		wins[winner] += 1
 		rounds_played += 1
 

@@ -51,8 +51,8 @@ func _build_info_text(winner: int) -> String:
 		lines.append("%s: %s" % [verdict, reason])
 		lines.append("Round %d:  %s %d - %d %s" % [
 			PlayerSetup.rounds_played,
-			GameManager.get_team_name(0), PlayerSetup.wins[0],
-			PlayerSetup.wins[1], GameManager.get_team_name(1)])
+			GameManager.get_team_name(GameManager.TEAM_ALPHA), PlayerSetup.wins[GameManager.TEAM_ALPHA],
+			PlayerSetup.wins[GameManager.TEAM_BRAVO], GameManager.get_team_name(GameManager.TEAM_BRAVO)])
 
 	lines.append(_next_round_text())
 	return "\n".join(PackedStringArray(lines))

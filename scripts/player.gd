@@ -1,8 +1,6 @@
 extends CharacterBody3D
 
-enum Faction { TEAM_ALPHA, TEAM_BRAVO }
-
-@export var faction: Faction = Faction.TEAM_ALPHA
+@export_enum("Alpha (Apes):0", "Bravo (Chrome Legion):1") var faction: int = 0
 @export var mouse_sensitivity: float = 0.003
 @export var jump_velocity: float = 4.5
 @export var character_class: CharacterClass:
@@ -35,10 +33,8 @@ var max_ammo: int = 30
 var is_reloading: bool = false
 var reload_timer: float = 0.0
 
-var _heal_cooldown_timer: float = 0.0
 var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0]
 var _is_overcharged: bool = false
-var _overcharge_timer: float = 0.0
 var _is_siphoning: bool = false
 var _siphon_target: Node3D = null
 var _siphon_timer: float = 0.0
@@ -54,7 +50,7 @@ var _grapple_timer: float = 0.0
 var _is_bulwark_active: bool = false
 var _bulwark_timer: float = 0.0
 var _damage_reduction_multiplier: float = 1.0 # 1.0 is normal, 0.5 is half damage
-var _is_adrenaline_boosted: bool = false # <-- ADD THESE
+var _is_adrenaline_boosted: bool = false
 var _adrenaline_timer: float = 0.0
 var _is_dashing: bool = false
 var _dash_timer: float = 0.0
@@ -63,7 +59,7 @@ var _spawn_protected: bool = false
 var _is_invulnerable: bool:
 	get:
 		return _is_dashing or _spawn_protected
-var _dash_direction: Vector3 = Vector3.ZERO # <-- ADD THIS
+var _dash_direction: Vector3 = Vector3.ZERO
 var _knockback_velocity: Vector3 = Vector3.ZERO
 var is_vulnerable: bool = false # Target Lock debuff: take +10% damage
 var _vulnerable_light: OmniLight3D = null
@@ -190,18 +186,6 @@ func _physics_process(delta: float):
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = jump_velocity
 
-	## --- Movement ---
-	#var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
-	#var direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
-#
-	#if direction:
-		#velocity.x = direction.x * speed
-		#velocity.z = direction.z * speed
-	#else:
-		#velocity.x = move_toward(velocity.x, 0, speed)
-		#velocity.z = move_toward(velocity.z, 0, speed)
-#
-	#move_and_slide()
 	
 	# --- Handle Adrenaline Timer ---
 	if _is_adrenaline_boosted:
@@ -289,15 +273,16 @@ func _physics_process(delta: float):
 
 	move_and_slide()
 	
-	# --- Class Swapping Logic (For Testing) ---
-	if Input.is_action_just_pressed("class_1"):
-		swap_class(0)
-	elif Input.is_action_just_pressed("class_2"):
-		swap_class(1)
-	elif Input.is_action_just_pressed("class_3"):
-		swap_class(2)
-	
-		# --- Ability Logic ---
+	# --- Class swapping: dev-only, stripped from release builds ---
+	if OS.is_debug_build():
+		if Input.is_action_just_pressed("class_1"):
+			swap_class(0)
+		elif Input.is_action_just_pressed("class_2"):
+			swap_class(1)
+		elif Input.is_action_just_pressed("class_3"):
+			swap_class(2)
+
+	# --- Ability Logic ---
 	for i in range(3):
 		if ability_cooldowns[i] > 0:
 			ability_cooldowns[i] -= delta
@@ -310,16 +295,6 @@ func _physics_process(delta: float):
 	elif Input.is_action_just_pressed("ability_3") and ability_cooldowns[2] <= 0.0:
 		_use_ability(2)
 		
-	## --- Handle Phase Dash Movement ---
-	#if _is_dashing:
-		#_dash_timer -= delta
-		## Maintain high speed during dash
-		#var dash_dir = -global_transform.basis.z
-		#velocity.x = dash_dir.x * speed * 4.0
-		#velocity.z = dash_dir.z * speed * 4.0
-		#if _dash_timer <= 0.0:
-			#_is_dashing = false
-			#_is_invulnerable = false
 
 # ─── Shooting ───────────────────────────────────────────────
 
@@ -400,8 +375,6 @@ func _spawn_tracer(from: Vector3, to: Vector3):
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(1.0, 0.85, 0.3)
-	#mat.emissive = Color(1.0, 0.6, 0.1)
-	#mat.emissive_energy = 4.0
 	tracer.material_override = mat
 
 	get_tree().root.add_child(tracer)
@@ -420,8 +393,6 @@ func _spawn_hit_effect(pos: Vector3, normal: Vector3):
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(1.0, 0.5, 0.1)
-	#mat.emissive = Color(1.0, 0.3, 0.0)
-	#mat.emissive_energy = 4.0
 	spark.material_override = mat
 
 	get_tree().root.add_child(spark)
@@ -585,7 +556,6 @@ func _phase_dash():
 	var ghost_mat = StandardMaterial3D.new()
 	ghost_mat.albedo_color = Color(1, 1, 1, 0.3) # 30% opacity
 	ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	#ghost_mat.emissive = Color(0.5, 0.5, 1.0) # Add a slight blue glow
 	$MeshInstance3D.material_override = ghost_mat
 	
 	# We use a one-shot timer to reset the visual, independent of the physics timer
@@ -601,8 +571,6 @@ func _overcharge():
 	if gun_model:
 		var overcharge_mat = StandardMaterial3D.new()
 		overcharge_mat.albedo_color = Color.ORANGE_RED
-		#overcharge_mat.emissive = Color.RED
-		#overcharge_mat.emissive_energy = 2.0
 		gun_model.material_override = overcharge_mat
 		
 	# End the effect after 4 seconds
@@ -632,8 +600,6 @@ func _adrenaline_spike():
 	# 4. Visual: Brief yellow flash on the player to indicate the sacrifice
 	var flash_mat = StandardMaterial3D.new()
 	flash_mat.albedo_color = Color.YELLOW
-	#flash_mat.emissive = Color.YELLOW
-	#flash_mat.emissive_energy = 4.0
 	$MeshInstance3D.material_override = flash_mat
 	
 	get_tree().create_timer(0.15).timeout.connect(func():
@@ -676,8 +642,6 @@ func _deploy_cover():
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.2, 0.6, 1.0, 0.5) # Semi-transparent blue
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	#mat.emissive = Color(0.1, 0.3, 0.8)
-	#mat.emissive_energy = 0.5
 	mesh_inst.material_override = mat
 	
 	wall.add_child(col)
@@ -724,8 +688,6 @@ func _bulwark_ability():
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.2, 0.6, 1.0, 0.15) # Very transparent blue
-	#mat.emissive = Color(0.2, 0.5, 1.0)
-	#mat.emissive_energy = 1.5
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED # So we can see the inside of the sphere
 	aura.material_override = mat
@@ -773,8 +735,6 @@ func _shockwave():
 	
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color.RED
-	#mat.emissive = Color.RED
-	#mat.emissive_energy = 4.0
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ring.material_override = mat
 	
@@ -801,8 +761,6 @@ func _grapple_hook():
 	# Visual: Make the player flash cyan while flying
 	var grapple_mat = StandardMaterial3D.new()
 	grapple_mat.albedo_color = Color.CYAN
-	#grapple_mat.emissive = Color.CYAN
-	#grapple_mat.emissive_energy = 2.0
 	$MeshInstance3D.material_override = grapple_mat
 	
 	get_tree().create_timer(0.4).timeout.connect(func():
@@ -849,8 +807,6 @@ func _life_siphon():
 	# Visuals: Turn the player purple to indicate siphoning
 	var siphon_mat = StandardMaterial3D.new()
 	siphon_mat.albedo_color = Color.MEDIUM_PURPLE
-	#siphon_mat.emissive = Color.PURPLE
-	#siphon_mat.emissive_energy = 2.0
 	$MeshInstance3D.material_override = siphon_mat
 	
 	# Visuals: Put a purple light on the enemy so you know who is tethered
@@ -934,8 +890,6 @@ func _respawn():
 	var shield_mat = StandardMaterial3D.new()
 	shield_mat.albedo_color = Color(1, 1, 1, 0.5) # Semi-transparent
 	shield_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	#shield_mat.emissive = Color.CYAN # Glowing cyan shield
-	#shield_mat.emissive_energy = 2.0
 	$MeshInstance3D.material_override = shield_mat
 	
 	# Remove shield after 2 seconds
@@ -949,11 +903,7 @@ func _respawn():
 # ─── Class Swapping ──────────────────────────────────────────
 
 func swap_class(index: int):
-	#print("Swap class triggered for index: ", index)
-	#print("Available classes array size: ", available_classes.size())
-	
 	if available_classes.size() > index and available_classes[index] != null:
-		#print("Class found in array! Swapping to: ", available_classes[index].class_name_str)
 		character_class = available_classes[index]
 	else:
-		print("ERROR: Array is empty, too small, or the slot is null!")
+		push_warning("swap_class: no class in slot %d" % index)

@@ -18,8 +18,8 @@ func _process(delta):
 	_spawn_timer -= delta
 	if _spawn_timer <= 0.0:
 		_spawn_timer = spawn_interval
-		_try_spawn_team(0) # Team Alpha
-		_try_spawn_team(1) # Team Bravo
+		_try_spawn_team(GameManager.TEAM_ALPHA)
+		_try_spawn_team(GameManager.TEAM_BRAVO)
 
 func _try_spawn_team(team: int):
 	# Count how many bots of this team are currently alive
@@ -34,7 +34,7 @@ func _try_spawn_team(team: int):
 
 func _spawn_bot(team: int):
 	if not enemy_scene:
-		print("Bot Manager: Bot scene is missing!")
+		push_warning("BotManager: bot scene is missing!")
 		return
 		
 	# Ask GameManager where this team spawns right now (INF = no spawns in this scene, e.g. menus)

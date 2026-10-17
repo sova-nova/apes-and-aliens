@@ -12,7 +12,7 @@ const TEAM_NONE := -1
 const TEAM_ALPHA := 0 # Apes
 const TEAM_BRAVO := 1 # Chrome Legion
 
-var points_captured: int = 0 # Replaces team_alpha_score / team_bravo_score
+var points_captured: int = 0
 
 var attacking_team: int = TEAM_ALPHA
 var defending_team: int = TEAM_BRAVO
@@ -30,7 +30,7 @@ var time_bonus_per_capture: float = 60.0
 var is_match_playing: bool = false
 var is_overtime: bool = false
 
-# --- Team helpers (single source of truth for names/colors) ---
+# ─── Teams ──────────────────────────────────────────────────
 func get_team_name(team: int) -> String:
 	match team:
 		TEAM_ALPHA: return "PRIMAL APES"
@@ -43,15 +43,14 @@ func get_team_color(team: int) -> Color:
 		TEAM_BRAVO: return Color.RED
 	return Color.WHITE
 
+func get_opposing_team(team: int) -> int:
+	return TEAM_BRAVO if team == TEAM_ALPHA else TEAM_ALPHA
+
 func set_roles(attacker: int):
 	attacking_team = attacker
-	defending_team = TEAM_BRAVO if attacker == TEAM_ALPHA else TEAM_ALPHA
+	defending_team = get_opposing_team(attacker)
 
-## Call between rounds (or from a menu) to flip who attacks.
-func swap_roles():
-	PlayerSetup.attacking_team = defending_team
-	set_roles(defending_team)
-
+# ─── Spawns ─────────────────────────────────────────────────
 ## Spawns that apply RIGHT NOW for a role: ones made for the current point,
 ## else any fallback for that role. (Attackers/defenders are roles, not factions.)
 func _get_spawn_pool(is_attacker: bool) -> Array:
@@ -101,6 +100,7 @@ func distance_to_attacker_spawn(pos: Vector3) -> float:
 		best = minf(best, d)
 	return best
 
+# ─── Match flow ─────────────────────────────────────────────
 func _process(delta):
 	if not is_match_playing:
 		return
@@ -170,7 +170,6 @@ func start_match_countdown():
 	is_match_playing = true
 
 # Only the attacking team can capture, so `team` is always attacking_team.
-# Only the attacking team can capture, so `team` is always attacking_team.
 func _on_point_captured(team: int):
 	if is_match_over:
 		return
@@ -211,7 +210,6 @@ func _end_match(winner: int):
 	PlayerSetup.record_result(winner)
 
 	game_won.emit(winner)
-	print("%s WIN" % get_team_name(winner))
 
 	await get_tree().create_timer(2.0).timeout
 	get_tree().change_scene_to_file("res://round_end.tscn")

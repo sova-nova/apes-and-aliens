@@ -1,9 +1,8 @@
 extends CharacterBody3D
 
-enum Faction { TEAM_ALPHA, TEAM_BRAVO }
 enum DefendRole { ANCHOR, HOLDER, FORWARD }
 
-@export var faction: Faction = Faction.TEAM_BRAVO
+@export_enum("Alpha (Apes):0", "Bravo (Chrome Legion):1") var faction: int = 1
 @export var character_class: CharacterClass
 
 @export_group("Aim")
@@ -25,6 +24,10 @@ enum DefendRole { ANCHOR, HOLDER, FORWARD }
 @export var min_spawn_distance: float = 12.0
 ## How often (min, max seconds) holders and forwards move to a fresh post.
 @export var reposition_interval: Vector2 = Vector2(10.0, 20.0)
+
+@export_group("Debug")
+## Draws each bot's navigation path. Costly with many bots, so leave it off unless diagnosing pathing.
+@export var debug_navigation: bool = false
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var move_speed: float = 3.0
@@ -99,15 +102,12 @@ func _ready():
 	if mesh_instance:
 		var team_mat = StandardMaterial3D.new()
 		team_mat.roughness = 0.8
-		if faction == 0: # TEAM_ALPHA
-			team_mat.albedo_color = Color.DODGER_BLUE
-		else: # TEAM_BRAVO
-			team_mat.albedo_color = Color.RED
-			
+		team_mat.albedo_color = GameManager.get_team_color(faction)
 		mesh_instance.material_override = team_mat
 		original_material = team_mat
 		
 	health_component.died.connect(_on_died)
+	nav_agent.debug_enabled = debug_navigation
 	add_to_group("bots")
 	
 	if character_class:
@@ -120,18 +120,6 @@ func _ready():
 	bar_container.position.y = 1.8 # Float above head
 	add_child(bar_container)
 	
-	## 1. Background Bar (The dark "missing health" bar)
-	#var bg_mesh_inst = MeshInstance3D.new()
-	#var bg_mesh = QuadMesh.new()
-	#bg_mesh.size = Vector2(1.0, 0.1) # Vector2 for QuadMesh!
-	#bg_mesh_inst.mesh = bg_mesh
-	#var bg_mat = StandardMaterial3D.new()
-	#bg_mat.albedo_color = Color(0.1, 0.1, 0.1) # Dark grey
-	#bg_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	#bg_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED # Ignore sun
-	#bg_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # Visible from both sides
-	#bg_mesh_inst.material_override = bg_mat
-	#bar_container.add_child(bg_mesh_inst)
 	
 	# 2. Foreground Bar (The green/yellow/red bar)
 	health_bar_mesh = MeshInstance3D.new()
@@ -144,8 +132,6 @@ func _ready():
 	
 	health_bar_mat = StandardMaterial3D.new()
 	health_bar_mat.albedo_color = Color.GREEN
-	#health_bar_mat.emissive = Color.GREEN
-	#health_bar_mat.emissive_energy = 1.0
 	health_bar_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	health_bar_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED # Ignore sun
 	health_bar_mat.cull_mode = BaseMaterial3D.CULL_DISABLED # Visible from both sides
@@ -159,7 +145,7 @@ func _ready():
 
 func apply_class():
 	if not character_class:
-		print("Bot missing CharacterClass!")
+		push_warning("Bot is missing a CharacterClass!")
 		return
 		
 	move_speed = character_class.move_speed
@@ -220,13 +206,10 @@ func update_health_bar():
 	# 3. Change color based on health percentage
 	if health_pct > 0.6:
 		health_bar_mat.albedo_color = Color.GREEN
-		#health_bar_mat.emissive = Color.GREEN
 	elif health_pct > 0.3:
 		health_bar_mat.albedo_color = Color.YELLOW
-		#health_bar_mat.emissive = Color.YELLOW
 	else:
 		health_bar_mat.albedo_color = Color.RED
-		#health_bar_mat.emissive = Color.RED
 	
 func set_vulnerable(state: bool):
 	is_vulnerable = state
@@ -880,8 +863,6 @@ func _spawn_bot_tracer(from: Vector3, to: Vector3):
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color.RED
-	#mat.emissive = Color.RED
-	#mat.emissive_energy = 4.0
 	tracer.material_override = mat
 
 	get_tree().root.add_child(tracer)
@@ -921,7 +902,7 @@ func _spawn_death_debris():
 		
 		# Theme differences!
 		var mat = StandardMaterial3D.new()
-		if faction == 0: # Apes
+		if faction == GameManager.TEAM_ALPHA: # Apes
 			box_mesh.size = Vector3(0.15, 0.15, 0.15)
 			box_shape.size = Vector3(0.15, 0.15, 0.15)
 			mat.albedo_color = Color.BURLYWOOD # Brown/yarn
@@ -929,8 +910,6 @@ func _spawn_death_debris():
 			box_mesh.size = Vector3(0.1, 0.1, 0.2) # Flat metal scraps
 			box_shape.size = Vector3(0.1, 0.1, 0.2)
 			mat.albedo_color = Color.LIGHT_GRAY
-			#mat.emissive = Color.CYAN
-			#mat.emissive_energy = 0.5
 			
 		mesh_inst.mesh = box_mesh
 		mesh_inst.material_override = mat

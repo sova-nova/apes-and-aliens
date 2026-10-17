@@ -60,8 +60,8 @@ func _mark(button: Button, selected: bool):
 	button.modulate = Color.GREEN if selected else Color.WHITE
 
 func _refresh_selection():
-	_mark($VBoxContainer/FactionHBox/ApesButton, _chosen_faction == 0)
-	_mark($VBoxContainer/FactionHBox/AliensButton, _chosen_faction == 1)
+	_mark($VBoxContainer/FactionHBox/ApesButton, _chosen_faction == GameManager.TEAM_ALPHA)
+	_mark($VBoxContainer/FactionHBox/AliensButton, _chosen_faction == GameManager.TEAM_BRAVO)
 
 	_mark($VBoxContainer/HBoxContainer/BreacherButton, _chosen_class == 0)
 	_mark($VBoxContainer/HBoxContainer/WardenButton, _chosen_class == 1)
@@ -74,7 +74,7 @@ func _refresh_selection():
 
 func _describe_choice() -> String:
 	var mine = GameManager.get_team_name(_chosen_faction)
-	var theirs = GameManager.get_team_name(1 - _chosen_faction)
+	var theirs = GameManager.get_team_name(GameManager.get_opposing_team(_chosen_faction))
 
 	var text: String
 	if _chosen_side == PlayerSetup.Side.ATTACK:
@@ -89,11 +89,11 @@ func _describe_choice() -> String:
 	return text
 
 func _on_apes_button_pressed():
-	_chosen_faction = 0
+	_chosen_faction = GameManager.TEAM_ALPHA
 	_refresh_selection()
 
 func _on_aliens_button_pressed():
-	_chosen_faction = 1
+	_chosen_faction = GameManager.TEAM_BRAVO
 	_refresh_selection()
 
 func _on_breacher_pressed():
