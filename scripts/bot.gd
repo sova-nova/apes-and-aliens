@@ -10,6 +10,13 @@ enum DefendRole { ANCHOR, HOLDER, FORWARD }
 @export var flinch_spread_multiplier: float = 2.0
 ## Seconds for the flinch penalty to fade back to normal.
 @export var flinch_duration: float = 1.0
+## How much of the class's aim error a bot keeps. The weapon's own spread comes on top of it, so this
+## is below 1.0: otherwise bots would be clumsier than the rest of the game's rules suggest.
+@export_range(0.0, 2.0) var aim_error_scale: float = 0.6
+
+@export_group("Weapon")
+## Bots reload like players do, which opens a gap you can exploit. Turn this on for bots that never run dry.
+@export var unlimited_ammo: bool = false
 
 @export_group("Defender AI")
 ## Chance a defender is an ANCHOR (holds close to the point).
@@ -37,10 +44,12 @@ enum DefendRole { ANCHOR, HOLDER, FORWARD }
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var move_speed: float = 3.0
-var attack_damage: float = 10.0
-var attack_range: float = 10.0
-var attack_cooldown: float = 1.0
-var _attack_timer: float = 0.0
+# Bots fire the same weapon data as players, through the same controller
+var weapon := WeaponController.new()
+## How far away this bot starts shooting: it comes from its weapon.
+var attack_range: float:
+	get:
+		return weapon.data.engage_range if weapon.data else 15.0
 var _knockback_velocity: Vector3 = Vector3.ZERO
 var is_vulnerable: bool = false
 
@@ -175,9 +184,9 @@ func apply_class():
 		return
 		
 	move_speed = character_class.move_speed
-	attack_damage = character_class.gun_damage
-	attack_cooldown = character_class.fire_rate
-	attack_range = 15 # character_class.gun_range later
+	weapon.setup(character_class.get_weapon(), get_instance_id())
+	weapon.attacker_name = character_class.class_name_str
+	weapon.unlimited_ammo = unlimited_ammo
 	aim_spread_degrees = character_class.bot_spread_degrees
 	reaction_min = character_class.bot_reaction_min
 	reaction_max = maxf(character_class.bot_reaction_max, reaction_min)
@@ -208,7 +217,7 @@ func take_damage(amount: float, _source_faction: int = -1, attacker_name: String
 		last_attacker_name = attacker_name
 
 	# Credit the damage (scoreboard, assists), capped at what we had left so overkill doesn't inflate it
-	if attacker != null and "stats_id" in attacker:
+	if attacker != null and attacker != self and "stats_id" in attacker:
 		_last_attacker_id = attacker.stats_id
 		GameManager.report_damage(stats_id, attacker.stats_id, minf(final_damage, health_component.current_health))
 
@@ -341,11 +350,9 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 				_reaction_left -= delta
 				return # Spotted them, still reacting: no shot yet
 
-			_attack_timer -= delta
-			if _attack_timer <= 0.0:
+			if weapon.can_fire():
 				_attack(combat_target)
-				_attack_timer = attack_cooldown
-			return # Skip pathfinding if we are shooting
+			return # Skip pathfinding if we are shooting (reloading bots stand and wait)
 
 	# Priority 2: If not fighting, move towards the active Capture Point!
 	if GameManager and GameManager.active_capture_point:
@@ -566,7 +573,7 @@ func _can_see(target) -> bool:
 ## Current aim error (std-dev, degrees). Gets worse right after the bot is hit.
 func _current_spread_degrees() -> float:
 	var flinch = clampf(1.0 - _since_damage / maxf(flinch_duration, 0.01), 0.0, 1.0)
-	return aim_spread_degrees * GameSettings.bot_spread_mult(faction) * (1.0 + (flinch_spread_multiplier - 1.0) * flinch)
+	return aim_spread_degrees * aim_error_scale * GameSettings.bot_spread_mult(faction) * (1.0 + (flinch_spread_multiplier - 1.0) * flinch)
 
 ## Deflects a direction by a random gaussian error on two axes.
 ## The miss DISTANCE grows with range automatically, since the error is angular.
@@ -582,45 +589,47 @@ func _apply_spread(dir: Vector3, sigma_deg: float) -> Vector3:
 		.rotated(right, deg_to_rad(randfn(0.0, sigma_deg))).normalized()
 
 func _attack(target: Node3D):
-	_attack_timer = attack_cooldown
 	var to_target = target.global_position - global_position
 	to_target.y = 0.0
 	rotation.y = atan2(-to_target.x, -to_target.z)
 
-	# Aim at the target, then add aim error
 	var origin = global_position + Vector3(0, 0.5, 0)
 	var aim_point = target.global_position + Vector3(0, 0.5, 0)
+	if weapon.data.behavior == WeaponData.Behavior.PROJECTILE:
+		aim_point = _lead_point(target, origin) # Aim where they're going, not where they are
+
+	# The bot's own aim error first; the weapon's spread then comes on top of it, inside fire()
 	var dir = _apply_spread((aim_point - origin).normalized(), _current_spread_degrees())
 
-	var shot_length = attack_range + 5.0
-	var end_point = origin + dir * shot_length
-
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(origin, end_point)
-	query.exclude = _ray_exclude()
-	var result = space_state.intersect_ray(query)
+	var result = weapon.fire(self, origin, dir, origin, _ray_exclude(), _lock_bonus)
+	if not result["fired"]:
+		return
 
 	var did_hit := false
-	if result:
-		end_point = result.position
-		# Whatever the shot actually hits takes the damage. Enemies only (no friendly fire),
-		# so a wide shot can clip a different enemy, and walls block it.
-		var hit = result.collider
-		if hit.has_method("take_damage") and "faction" in hit and hit.faction != faction and _is_valid_target(hit):
-			var my_name = character_class.class_name_str if character_class else "Bot"
-			var damage = attack_damage * _damage_multiplier * GameSettings.bot_damage_mult(faction)
-			if hit == _locked_target:
-				damage *= 1.3 # Target Lock bonus, same as the player's version
-			hit.take_damage(damage, faction, my_name, global_position, self)
+	for shot in result["shots"]:
+		CombatFx.tracer(self, shot["from"], shot["to"], Color.RED, 0.05, 0.05) # So you can SEE bots miss
+		if shot["enemy_hit"]:
 			did_hit = true
+	GameManager.report_shot(stats_id, did_hit) # Projectiles count as hits later, when they land
 
-	GameManager.report_shot(stats_id, did_hit)
+	AudioManager.play_shoot(global_position)
 
-	# Tracer on every shot, so you can SEE bots miss
-	CombatFx.tracer(self, origin, end_point, Color.RED, 0.05, 0.05)
+## Target Lock: +30% damage against the enemy we marked.
+func _lock_bonus(target) -> float:
+	return 1.3 if target == _locked_target else 1.0
 
-	if AudioManager:
-		AudioManager.play_shoot(global_position)
+## Where to aim a projectile so it arrives where a moving target will be.
+func _lead_point(target: Node3D, origin: Vector3) -> Vector3:
+	var here: Vector3 = target.global_position + Vector3(0, 0.5, 0)
+	var speed := weapon.data.projectile_speed
+	if speed < 0.1 or not ("velocity" in target):
+		return here
+	var their_velocity: Vector3 = target.velocity
+	their_velocity.y = 0.0
+	var travel_time := here.distance_to(origin) / speed
+	for _i in range(2): # Two passes: the longer the flight, the further they go
+		travel_time = (here + their_velocity * travel_time).distance_to(origin) / speed
+	return here + their_velocity * travel_time
 
 # ─── AI Abilities ───────────────────────────────────────────
 
@@ -716,6 +725,10 @@ func _tick_effects(delta: float):
 	_damage_multiplier = 1.5 if _overcharge_left > 0.0 else 1.0
 	_damage_reduction_multiplier = 0.5 if _bulwark_left > 0.0 else 1.0
 	_speed_multiplier = 1.5 if _adrenaline_left > 0.0 else 1.0
+
+	# The weapon follows Overcharge and the difficulty setting, and keeps its own cooldown and ammo
+	weapon.damage_multiplier = _damage_multiplier * GameSettings.bot_damage_mult(faction)
+	weapon.tick(delta)
 
 	if _flash_left > 0.0:
 		_flash_left -= delta

@@ -1,11 +1,13 @@
-[gd_resource type="Resource" script_class="CharacterClass" load_steps=2 format=3 uid="uid://cu8g84si2v42l"]
+[gd_resource type="Resource" script_class="CharacterClass" load_steps=3 format=3 uid="uid://cu8g84si2v42l"]
 
 [ext_resource type="Script" uid="uid://vbls7s42ixmg" path="res://scripts/character_class.gd" id="1_gbe78"]
+[ext_resource type="Resource" path="res://weapons/breacher_rifle.tres" id="2_m71sx"]
 
 [resource]
 script = ExtResource("1_gbe78")
 class_name_str = "Breacher"
 max_health = 115.0
+weapon = ExtResource("2_m71sx")
 gun_damage = 24.0
 fire_rate = 0.13
 ability_1_type = 1

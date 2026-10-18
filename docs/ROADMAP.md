@@ -65,11 +65,12 @@ Reorganize the existing game so it *could* be networked, while keeping it playab
 Each step is independently testable, and the first one is useful on its own.
 
 1. **Input abstraction (M).** Move all controls onto Godot's input actions, so `Tab` and mouse-look are no longer hard-coded. This also unlocks **key rebinding and controller support**, both in your design doc.
-2. **Split the player (L).** `player.gd` currently mixes input, movement, shooting, abilities, camera, HUD, audio, and effects. Separate it into the part that *decides* (the server's job) and the part that *shows* (camera, HUD, effects, sound: each client's job).
-3. **Route all damage through one function (M).** Kills, assists, and stats all depend on it.
-4. **Split `GameManager` (M).** Today one object holds match state, spawning, and stats. Separate the *state* (the server owns it) from how it's *displayed* (each client's HUD reads it).
-5. **Make bots server-side only and support any number of players (M).** Remove the "there is exactly one player" assumptions.
-6. **Run offline play through the server path (S).** Single-player becomes "host a match with one local player and some bots".
+2. **Weapon system v1 (M to L): BUILT.** Weapons become data (hitscan and projectile, spread, falloff curves) fired by one shared system used by both players and bots. This is the cleanest slice to carve out of the player script, and the class roster, range-aware bots, and the netcode all depend on it. Full design in `WEAPONS.md`.
+3. **Split the player (L).** `player.gd` currently mixes input, movement, shooting, abilities, camera, HUD, audio, and effects. Separate it into the part that *decides* (the server's job) and the part that *shows* (camera, HUD, effects, sound: each client's job). Once weapons are extracted, much of this is already done.
+4. **Route all damage through one function (M).** Kills, assists, and stats all depend on it. The weapon system makes this natural.
+5. **Split `GameManager` (M).** Today one object holds match state, spawning, and stats. Separate the *state* (the server owns it) from how it's *displayed* (each client's HUD reads it).
+6. **Make bots server-side only and support any number of players (M).** Remove the "there is exactly one player" assumptions.
+7. **Run offline play through the server path (S).** Single-player becomes "host a match with one local player and some bots".
 
 **Done when:** the game plays exactly as it does today, but gameplay code doesn't depend on a single local player, and nothing in it calls the HUD directly.
 
@@ -106,12 +107,11 @@ Your first milestone: *friends can play together online.*
 
 Roughly in this order, because each builds on the one before:
 
-1. **Weapons.** An open question, so a design session comes first. The new class roster depends on it.
-2. **Healer class.** It adds new systems (healing others), so do it before the other classes.
-3. **Four classes per faction.** Healer, Tank, Long Range, Short Range, with three abilities each.
-4. **New modes.** King of the Hill, then Team Deathmatch, then the rest.
-5. **Series and round structure** for the online setting.
-6. **Balance tooling.** The stats system we built is the start of this.
+1. **Weapons per class.** The system is decided (see `WEAPONS.md`) and built in Phase 2. Here we design each class's weapon, with its faction counterpart.
+2. **Four classes per faction.** Eight class definitions (a healer, a tank, a long-range class, and a short/mid-range class on each side), with each role having a counterpart on the other side: same job, different abilities and weapon feel. Build the healer first, since it adds new systems (healing others, and a healing weapon). Three classes per side is fine to keep building on until then.
+3. **New modes.** King of the Hill, then Team Deathmatch, then the rest.
+4. **Series and round structure** for the online setting.
+5. **Balance tooling.** The stats system we built is the start of this.
 
 ---
 
@@ -154,9 +154,12 @@ Alpha and beta definitions, a Steam store page, and the Early Access decision.
 
 ---
 
-## Questions to settle
+## Questions: status
 
-1. **Are the four classes per faction unique to each faction** (eight different classes) **or the same four roles with different looks and abilities?** This changes the art and balance work a lot.
-2. **Should offline play against bots remain a lasting mode** (for practice and the tutorial)? If so, Phase 2's "offline uses the server path" step is essential.
-3. **How will weapons work?** (This is your "let's figure that out.") It affects classes, balance, and animation.
-4. **Hardware target.** We can measure first: pick a low-end machine you can test on, then decide.
+| Question | Answer |
+|---|---|
+| Are the counterpart classes unique to each faction? | **Decided:** counterparts. Same job, different abilities, and possibly different weapons. |
+| Should offline play against bots remain a lasting mode? | **Decided: yes.** |
+| How will weapons work? | **Decided:** see `WEAPONS.md`. A few details remain open there. |
+| Hardware target | **Leaning:** a machine with 8 GB of RAM and a low-end graphics card. Godot's Forward+ and Mobile renderers need a GPU with Vulkan 1.0 (or Direct3D 12 on Windows); the Compatibility renderer runs on OpenGL 3.3 and supports the widest range of hardware. The renderer choice should be made by measuring on a real low-end machine. |
+| Which roles per faction? | **Decided as a baseline:** four per faction: a healer, a tank, a long-range class, and a short/mid-range class. |

@@ -35,6 +35,10 @@ static func team_material(team: int) -> StandardMaterial3D:
 		_team_materials[team] = mat
 	return mat
 
+## A shared sphere mesh (public, for projectiles).
+static func sphere_mesh(radius: float) -> SphereMesh:
+	return _sphere(radius)
+
 static func _sphere(radius: float) -> SphereMesh:
 	var mesh = _spheres.get(radius)
 	if mesh == null:
@@ -141,3 +145,22 @@ static func _get_debris_parts(team: int) -> Dictionary:
 		parts = {"mesh": box_mesh, "shape": box_shape, "material": material(color)}
 		_debris_parts[team] = parts
 	return parts
+
+## A quick expanding flash for an explosion. It gets its own material, since it fades out.
+static func explosion(host: Node, pos: Vector3, radius: float, color: Color) -> void:
+	var node := MeshInstance3D.new()
+	node.mesh = _sphere(1.0)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, 0.55)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	node.material_override = mat
+
+	host.get_tree().root.add_child(node)
+	node.global_position = pos
+	node.scale = Vector3.ONE * 0.2
+
+	var tween := node.create_tween()
+	tween.tween_property(node, "scale", Vector3.ONE * maxf(radius, 0.5), 0.2).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(mat, "albedo_color:a", 0.0, 0.2)
+	tween.tween_callback(node.queue_free)

@@ -166,6 +166,11 @@ func report_shot(shooter_id: String, hit: bool) -> void:
 	if hit:
 		stats[shooter_id]["hits"] += 1
 
+## A projectile (or its explosion) landed on an enemy. Counts toward the shooter's accuracy.
+func report_hit(shooter_id: String) -> void:
+	if stats.has(shooter_id):
+		stats[shooter_id]["hits"] += 1
+
 func add_objective_time(id: String, seconds: float) -> void:
 	if stats.has(id):
 		stats[id]["objective_time"] += seconds

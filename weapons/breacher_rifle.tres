@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+weapon_name = "Assault Rifle"
+behavior = 0
+damage = 24.0
+fire_interval = 0.13
+pellets = 1
+max_range = 100.0
+magazine_size = 30
+reload_style = 0
+reload_time = 1.5
+spread_base = 0.5
+spread_bloom_per_shot = 0.6
+spread_bloom_max = 3.0
+spread_recovery = 4.0
+first_shot_accurate = true
+accuracy_reset_time = 0.3
+falloff_start = 20.0
+falloff_end = 50.0
+falloff_min = 0.6
+falloff_shape = 1.0
+engage_range = 20.0
+projectile_speed = 30.0
+projectile_gravity = 0.0
+projectile_lifetime = 3.0
+projectile_size = 0.25
+splash_radius = 0.0
+splash_min_multiplier = 0.3
+knockback_force = 0.0
+self_damage_multiplier = 0.0
+self_knockback_multiplier = 1.0
+tracer_color = Color(1, 0.85, 0.3, 1)

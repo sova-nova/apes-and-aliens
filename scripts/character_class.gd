@@ -18,7 +18,11 @@ enum AbilityType {
 @export var max_health: float = 100.0
 @export var move_speed: float = 5.0
 
-# Weapon Stats
+# The weapon this class fires (see WeaponData). If it's left empty, a plain one is built from the
+# older gun fields below, so a class still works without one.
+@export var weapon: WeaponData
+
+# Older gun fields: used ONLY when no Weapon is set above.
 @export var gun_damage: float = 25.0
 @export var fire_rate: float = 0.12
 @export var gun_range: float = 100.0
@@ -44,6 +48,12 @@ enum AbilityType {
 ## A bot that newly spots an enemy waits a random time in this range before its first shot.
 @export var bot_reaction_min: float = 0.3
 @export var bot_reaction_max: float = 0.5
+
+## The weapon this class fires: its own, or a plain one built from the older gun fields.
+func get_weapon() -> WeaponData:
+	if weapon:
+		return weapon
+	return WeaponData.from_class(self)
 
 # ─── Display info ───────────────────────────────────────────
 ## Names and one-line descriptions for every ability, shared by class select and the HUD.

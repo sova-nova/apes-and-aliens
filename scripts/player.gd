@@ -35,12 +35,18 @@ var _last_attacker_ref: WeakRef = null # The node that hurt us last (it may be g
 var _last_attacker_id: String = ""
 var _death_cam: DeathCam = null
 
-var _can_shoot: bool = true
-var _shoot_cooldown: float = 0.0
-var current_ammo: int = 30
-var max_ammo: int = 30
-var is_reloading: bool = false
-var reload_timer: float = 0.0
+# The weapon: ammo, reloading, spread and firing all live in the controller (see WeaponController).
+# These three read-only properties keep the HUD and the ammo signal working unchanged.
+var weapon := WeaponController.new()
+var current_ammo: int:
+	get:
+		return weapon.ammo
+var max_ammo: int:
+	get:
+		return weapon.data.magazine_size if weapon.data else 0
+var is_reloading: bool:
+	get:
+		return weapon.reloading
 
 var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0]
 var _is_overcharged: bool = false
@@ -130,18 +136,16 @@ func apply_class():
 	health_component.max_health = character_class.max_health
 	health_component.revive() # Refill health on class swap (also tells the HUD)
 	_is_overcharged = false
-	current_ammo = character_class.mag_size
-	max_ammo = character_class.mag_size
-	is_reloading = false
-	
-	# Apply Weapon Stats
+
+	# The class's weapon, with a full magazine. (The seed makes this shooter's spread repeatable.)
+	weapon.setup(character_class.get_weapon(), hash(stats_id))
+	weapon.attacker_name = character_class.class_name_str
 	if aim_ray:
-		aim_ray.target_position = Vector3(0, 0, -character_class.gun_range)
+		aim_ray.target_position = Vector3(0, 0, -weapon.data.max_range) # Abilities aim with this ray
 		
 	# Reset Cooldowns
 	ability_cooldowns = [0.0, 0.0, 0.0]
 	_last_ability_shown = [-2.0, -2.0, -2.0] # So the HUD refreshes, without an "ability ready" pip
-	_shoot_cooldown = 0.0
 	
 	# Tell the HUD to update
 	class_changed.emit(character_class.class_name_str)
@@ -173,31 +177,22 @@ func _physics_process(delta: float):
 		move_and_slide()
 		return # Stop right here, don't process movement or shooting!
 	
-	# --- Shoot cooldown ---
-	if not _can_shoot:
-		_shoot_cooldown -= delta
-		if _shoot_cooldown <= 0.0:
-			_can_shoot = true
+	# --- Weapon: Overcharge doubles the fire rate and adds 50% damage ---
+	weapon.damage_multiplier = 1.5 if _is_overcharged else 1.0
+	weapon.fire_interval_multiplier = 0.5 if _is_overcharged else 1.0
+	weapon.tick(delta) # Cooldown, reloading, and spread recovery
 
 	# --- Shooting ---
 	if Input.is_action_pressed("shoot") \
 		and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
-		and _can_shoot:
+		and weapon.can_fire():
 		shoot()
-		
-	# --- Reload Logic ---
-	if is_reloading:
-		reload_timer -= delta
-		if reload_timer <= 0.0:
-			is_reloading = false
-			current_ammo = max_ammo
-	
+
 	# Tell the HUD about ammo, but only when it changed
 	_sync_ammo_signal()
-			
-	if Input.is_action_just_pressed("reload") and not is_reloading and current_ammo < max_ammo:
-		is_reloading = true
-		reload_timer = character_class.reload_time
+
+	if Input.is_action_just_pressed("reload"):
+		weapon.start_reload() # Does nothing if the magazine is full or it's already reloading
 
 	# --- Gravity ---
 	if not is_on_floor():
@@ -335,72 +330,59 @@ func _sync_ammo_signal():
 		ammo_changed.emit(current_ammo, max_ammo, is_reloading)
 
 func shoot():
-	# 1. Calculate base modified stats
-	var current_fire_rate = character_class.fire_rate
-	var current_gun_damage = character_class.gun_damage
-	
-	if current_ammo <= 0 or is_reloading:
-		# Auto-reload if empty
-		if not is_reloading:
-			is_reloading = true
-			reload_timer = character_class.reload_time
-		return
-		
-	current_ammo -= 1
-	var did_hit := false # For the scoreboard's accuracy column
-	
-	if _is_overcharged:
-		current_fire_rate *= 0.5 # Halved cooldown = Double fire rate!
-		current_gun_damage *= 1.5 # 50% more damage!
-	
-	_can_shoot = false
-	_shoot_cooldown = current_fire_rate
+	var origin := camera_3d.global_position
+	var aim_dir := -camera_3d.global_transform.basis.z
+	var muzzle_pos := muzzle.global_position if muzzle else origin
 
+	# The weapon decides what the shot does: spread, falloff, damage, projectiles
+	var result := weapon.fire(self, origin, aim_dir, muzzle_pos, _weapon_excludes(), _lock_bonus)
+	if not result["fired"]:
+		return
+
+	# Everything below just shows it
 	_flash_muzzle()
-	AudioManager.play_shoot(muzzle.global_position)
+	AudioManager.play_shoot(muzzle_pos)
 	_apply_screen_shake(0.1)
 
-	aim_ray.force_raycast_update()
+	var did_hit := false
+	var killed := false
+	var damage_by_target := {} # One damage number per target, even for a shotgun blast
+	for shot in result["shots"]:
+		CombatFx.tracer(self, shot["from"], shot["to"], weapon.data.tracer_color, 0.04, 0.06)
+		if shot["hit"] != null:
+			CombatFx.spark(self, shot["to"], shot["normal"])
+		if shot["enemy_hit"]:
+			did_hit = true
+			killed = killed or shot["killed"]
+			var target = shot["hit"]
+			damage_by_target[target] = damage_by_target.get(target, 0.0) + shot["damage"]
 
-	var origin: Vector3 = muzzle.global_position if muzzle else camera_3d.global_position
-	var end_point: Vector3
+	for target in damage_by_target:
+		if is_instance_valid(target) and target.has_method("spawn_damage_number"):
+			target.spawn_damage_number(damage_by_target[target])
 
-	if aim_ray.is_colliding():
-		var collider = aim_ray.get_collider()
-		end_point = aim_ray.get_collision_point()
-		var normal = aim_ray.get_collision_normal()
+	if did_hit:
+		# A kill gets a gold marker and a ding, so it reads differently from a hit
+		HUD.show_hit_marker(killed)
+		if killed:
+			AudioManager.play_kill_confirm()
 
-		# 2. Target Lock 30% damage boost (Now collider exists!)
-		if _is_target_locking and is_instance_valid(_target_locked_enemy) and collider == _target_locked_enemy:
-			current_gun_damage *= 1.3
-
-		if collider.has_method("take_damage"):
-			# --- Friendly Fire Check ---
-			# Only deal damage if they are NOT on our team
-			var is_enemy = true
-			if "faction" in collider:
-				if collider.faction == faction:
-					is_enemy = false # They are on our team, don't hurt them!
-			
-			if is_enemy:
-				collider.take_damage(current_gun_damage, faction, "Player", Vector3.INF, self)
-				did_hit = true
-				
-				if collider.has_method("spawn_damage_number"):
-					collider.spawn_damage_number(current_gun_damage)
-				
-				# Did that shot kill? Gold marker and a ding, so a kill reads differently from a hit
-				var killed = "health_component" in collider and collider.health_component.is_dead()
-				HUD.show_hit_marker(killed)
-				if killed:
-					AudioManager.play_kill_confirm()
-
-		CombatFx.spark(self, end_point, normal)
-	else:
-		end_point = aim_ray.global_position + (-aim_ray.global_transform.basis.z * character_class.gun_range)
-
+	# Projectiles count as hits later, when they land
 	GameManager.report_shot(stats_id, did_hit)
-	CombatFx.tracer(self, origin, end_point, Color(1.0, 0.85, 0.3), 0.04, 0.06)
+
+## What our shots pass through: ourselves, and our own team's cover walls.
+func _weapon_excludes() -> Array[RID]:
+	var excluded: Array[RID] = [get_rid()]
+	for wall in get_tree().get_nodes_in_group("cover_walls_%d" % faction):
+		if wall is CollisionObject3D and is_instance_valid(wall):
+			excluded.append(wall.get_rid())
+	return excluded
+
+## Target Lock: +30% damage against the enemy we marked.
+func _lock_bonus(target) -> float:
+	if _is_target_locking and is_instance_valid(_target_locked_enemy) and target == _target_locked_enemy:
+		return 1.3
+	return 1.0
 
 func _flash_muzzle():
 	if not muzzle_flash:
@@ -493,7 +475,7 @@ func take_damage(amount: float, _source_faction: int = -1, attacker_name: String
 
 	# Credit the damage (scoreboard, assists), and remember who it was for the death screen.
 	# Capped at what we had left, so overkill doesn't inflate their total.
-	if attacker != null and "stats_id" in attacker:
+	if attacker != null and attacker != self and "stats_id" in attacker:
 		_last_attacker_ref = weakref(attacker)
 		_last_attacker_id = attacker.stats_id
 		GameManager.report_damage(stats_id, attacker.stats_id, minf(final_damage, health_component.current_health))
@@ -693,7 +675,9 @@ func _deploy_cover():
 	else:
 		wall.rotation.y = global_rotation.y # Fallback if looking straight up/down
 	
-	# 6. CRITICAL: Make the player's aim ray ignore the wall so we can shoot through it!
+	# 6. CRITICAL: our team's shots must pass through the wall. The weapon looks for this group,
+	# and the aim ray (used by abilities) gets an exception.
+	wall.add_to_group("cover_walls_%d" % faction)
 	aim_ray.add_exception(wall)
 	
 	# 7. Wall destroys itself after 6 seconds
@@ -947,10 +931,7 @@ func _respawn():
 	process_mode = Node.PROCESS_MODE_INHERIT
 
 	# A fresh life: full mag, ready weapon, fresh cooldowns
-	current_ammo = max_ammo
-	is_reloading = false
-	_can_shoot = true
-	_shoot_cooldown = 0.0
+	weapon.refill()
 	ability_cooldowns = [0.0, 0.0, 0.0]
 	_last_ability_shown = [-2.0, -2.0, -2.0] # So the HUD refreshes, without an "ability ready" pip
 

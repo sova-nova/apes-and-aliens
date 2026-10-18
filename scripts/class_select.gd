@@ -25,6 +25,7 @@ var _swap_check: CheckButton
 var _summary_label: Label
 var _info_title: Label
 var _info_stats: Label
+var _info_weapon: Label
 var _info_abilities: Array[Label] = []
 
 func _ready():
@@ -99,6 +100,10 @@ func _build_info_panel():
 	_info_stats.modulate = Color(1, 1, 1, 0.85)
 	box.add_child(_info_stats)
 
+	_info_weapon = Label.new()
+	_info_weapon.modulate = Color(1, 1, 1, 0.85)
+	box.add_child(_info_weapon)
+
 	box.add_child(HSeparator.new())
 
 	for i in range(3):
@@ -124,9 +129,9 @@ func _update_info_panel():
 	var c: CharacterClass = CLASSES[_chosen_class]
 
 	_info_title.text = "%s  —  %s" % [CLASS_TITLES[_chosen_class].to_upper(), CLASS_TAGLINES[_chosen_class]]
-	_info_stats.text = "HP %d   ·   Speed %.1f   ·   %d damage × %.1f/s  (%d DPS)   ·   Mag %d   ·   Reload %.1fs" % [
-		int(c.max_health), c.move_speed, int(c.gun_damage), 1.0 / c.fire_rate,
-		int(c.gun_damage / c.fire_rate), c.mag_size, c.reload_time]
+	var w := c.get_weapon()
+	_info_stats.text = "HP %d   ·   Speed %.1f   ·   Weapon: %s" % [int(c.max_health), c.move_speed, w.weapon_name]
+	_info_weapon.text = "%s   ·   Mag %d   ·   Reload %s" % [w.damage_text(), w.magazine_size, w.reload_text()]
 
 	var types := [c.ability_1_type, c.ability_2_type, c.ability_3_type]
 	var cooldowns := [c.ability_1_cooldown, c.ability_2_cooldown, c.ability_3_cooldown]

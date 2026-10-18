@@ -82,13 +82,13 @@ Keep it short. Write **decisions**, not wishes, and mark each as:
 
 ## 5. Content plan
 
-| Content | At first release | Later |
-|---|---|---|
-| Classes | 3 classes per side | Up to 6 or more per side later |
-| Maps (and their themes) | At least 3 maps to start | Want at least 8-10 later |
-| Game modes | Undecided | At least 5 |
-| Cosmetics (hats, skins, emotes) | Undecided, although receptive | Undecided as well |
-| Progression (levels, unlocks, challenges) | Levels, unlocks, challenges, although unsure what | More of each of them |
+| Content                                   | At first release                                  | Later                          |
+| ----------------------------------------- | ------------------------------------------------- | ------------------------------ |
+| Classes                                   | 4 classes per side                                | Up to 6 or more per side later |
+| Maps (and their themes)                   | At least 3 maps to start                          | Want at least 8-10 later       |
+| Game modes                                | Undecided                                         | At least 5                     |
+| Cosmetics (hats, skins, emotes)           | Undecided, although receptive                     | Undecided as well              |
+| Progression (levels, unlocks, challenges) | Levels, unlocks, challenges, although unsure what | More of each of them           |
 
 **Level design principles:** *(Lanes? Verticality? Cover density? How long should a capture push take?)*
  - I have to look into level design before writing here.
@@ -165,6 +165,14 @@ Keep it short. Write **decisions**, not wishes, and mark each as:
 
 ## 11. Open questions and decision log
 
-| Date | Question or decision | Outcome |
-|---|---|---|
-| | | |
+| Date     | Question or decision                   | Outcome                                                                          |
+| -------- | -------------------------------------- | -------------------------------------------------------------------------------- |
+| 10/17/26 | Offline play against bots              | Remains a mode                                                                   |
+| 10/17/26 | Weapon behaviors                       | Hitscan for fast weapons, projectiles for slow, with explicit exceptions allowed |
+| 10/17/26 | Accuracy, damage, and weapon structure | TF2-style spread, falloff curves, one weapon per class at launch                 |
+| 10/17/26 | Hardware target                        | Leaning: 8 GB RAM, low-end GPU. Decide the renderer by testing                   |
+| 10/18/26 | Classes per faction                    | Four as a baseline: healer, tank, long-range, short/mid-range                    |
+| 10/18/26 | Weapon exceptions                      | Allowed                                                                          |
+| 10/18/26 | Explosion knockback and self-damage    | Allowed; per weapon, and case by case for abilities                              |
+| 10/18/26 | Spread and movement                    | Moving does not widen spread                                                     |
+| 10/18/26 | Reloads                                | Different for each weapon                                                        |

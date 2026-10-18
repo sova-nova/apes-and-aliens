@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+weapon_name = "Rocket Launcher"
+behavior = 1
+damage = 75.0
+fire_interval = 0.9
+pellets = 1
+max_range = 100.0
+magazine_size = 4
+reload_style = 0
+reload_time = 2.6
+spread_base = 0.0
+spread_bloom_per_shot = 0.0
+spread_bloom_max = 0.0
+spread_recovery = 3.0
+first_shot_accurate = false
+accuracy_reset_time = 0.3
+falloff_start = 20.0
+falloff_end = 50.0
+falloff_min = 1.0
+falloff_shape = 1.0
+engage_range = 25.0
+projectile_speed = 26.0
+projectile_gravity = 0.0
+projectile_lifetime = 3.0
+projectile_size = 0.3
+splash_radius = 3.5
+splash_min_multiplier = 0.35
+knockback_force = 14.0
+self_damage_multiplier = 0.5
+self_knockback_multiplier = 1.0
+tracer_color = Color(1, 0.45, 0.2, 1)

@@ -1,12 +1,14 @@
-[gd_resource type="Resource" script_class="CharacterClass" load_steps=2 format=3 uid="uid://bqkmdeoltk2e1"]
+[gd_resource type="Resource" script_class="CharacterClass" load_steps=3 format=3 uid="uid://bqkmdeoltk2e1"]
 
 [ext_resource type="Script" uid="uid://vbls7s42ixmg" path="res://scripts/character_class.gd" id="1_8ougj"]
+[ext_resource type="Resource" path="res://weapons/warden_repeater.tres" id="2_4mixa"]
 
 [resource]
 script = ExtResource("1_8ougj")
 class_name_str = "Warden"
 max_health = 230.0
 move_speed = 3.0
+weapon = ExtResource("2_4mixa")
 gun_damage = 14.0
 fire_rate = 0.115
 gun_range = 50.0
