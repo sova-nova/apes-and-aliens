@@ -156,6 +156,7 @@ func _build_crosshair_tab() -> void:
 	preview_panel.add_theme_stylebox_override("panel", preview_style)
 	tab.add_child(preview_panel)
 	var preview := Crosshair.new()
+	preview.demo_mode = true # Pulses a fake spread, so "Dynamic" can be seen working
 	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview_panel.add_child(preview)
@@ -223,6 +224,14 @@ func _build_crosshair_tab() -> void:
 		GameSettings.crosshair_dot = on
 		_crosshair_changed())
 	toggles.add_child(dot_check)
+	var dynamic_check := CheckBox.new()
+	dynamic_check.text = "Dynamic"
+	dynamic_check.tooltip_text = "The crosshair opens up as your shots get less accurate."
+	dynamic_check.button_pressed = GameSettings.crosshair_dynamic
+	dynamic_check.toggled.connect(func(on: bool) -> void:
+		GameSettings.crosshair_dynamic = on
+		_crosshair_changed())
+	toggles.add_child(dynamic_check)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	toggles.add_child(spacer)

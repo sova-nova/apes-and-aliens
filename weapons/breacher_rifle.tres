@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3 uid="uid://l1n087p1p5ob"]
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3 uid="uid://dsxghoy4v1vrq"]
 
 [ext_resource type="Script" uid="uid://cknxalc2fuyqa" path="res://scripts/weapon_data.gd" id="1_weapon"]
 
@@ -12,7 +12,9 @@ spread_bloom_per_shot = 0.6
 spread_bloom_max = 3.0
 spread_recovery = 4.0
 first_shot_accurate = true
-falloff_min = 0.6
+falloff_start = 18.0
+falloff_end = 35.0
+falloff_min = 0.3
 engage_range = 20.0
 ideal_range_min = 6.0
 ideal_range_max = 18.0

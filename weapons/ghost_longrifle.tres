@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3 uid="uid://usqed2406kan"]
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3 uid="uid://c6uklmuvlg6ia"]
 
 [ext_resource type="Script" uid="uid://cknxalc2fuyqa" path="res://scripts/weapon_data.gd" id="1_weapon"]
 
@@ -14,6 +14,6 @@ falloff_start = 40.0
 falloff_end = 120.0
 falloff_min = 0.9
 engage_range = 35.0
-ideal_range_min = 14.0
+ideal_range_min = 20.0
 ideal_range_max = 40.0
 tracer_color = Color(0.6, 0.9, 1, 1)

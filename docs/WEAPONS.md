@@ -3,7 +3,7 @@
 The weapon system for Apes vs Aliens: what's decided, how it will be built, and what's still open.
 Companion to `GAME_DESIGN.md`. Status words are the same: **Decided**, **Leaning**, **Open**.
 
-*Last updated: 10/18/26. Weapon system v1 and range-aware bots are built (see section 9).*
+*Last updated: 10/18/26. Weapon system v1, range-aware bots, the dynamic crosshair, and a first balance pass are done (see section 9).*
 
 ---
 
@@ -138,8 +138,8 @@ Counterpart classes share the same *job* and range band, but differ in how they 
 3. **Done:** the projectile behavior (`Projectile`), with splash, knockback, self-damage, pooling, and bots that lead their targets.
 4. **Done, for testing:** two extra weapons you can assign to any class: a *Scatter Gun* (shotgun pellets, round-by-round reload) and a *Rocket Launcher* (projectile with splash).
 5. **Done: range-aware bots.** Each weapon declares a best-range band, and bots fight inside it (see "Bots and range" below).
-6. **Next: dynamic crosshair** that shows bloom (optional).
-7. **Next: balance pass,** time-to-kill across range bands.
+6. **Done: dynamic crosshair.** The crosshair opens up by exactly as much as your shots can scatter (see "The dynamic crosshair" below). It can be turned off in settings.
+7. **Done: first balance pass** on time-to-kill across range bands (see section 11), with a reusable simulator in `tools/balance_sim.py`.
 8. **Later: healing weapons, per-weapon sounds and effects, and more reload styles.**
 
 **Bots and range.** A bot with a weapon that has a best-range band behaves like this while fighting:
@@ -155,10 +155,56 @@ All of it is in the bot's "Range" settings, and each weapon file has its own ban
 
 Not yet: bots using cover, strafing, or choosing *which* fights to take. Those are later behavior work.
 
+**The dynamic crosshair.** The weapon's current spread is an angle. The crosshair converts it to screen pixels using the camera's field of view, so the opening you see is the real cone: a shot that deviates by that angle lands exactly on its edge. It opens quickly (about 0.2 s) and closes a little slower (about 0.45 s), so a burst feels like bloom. Each style shows it differently: arms move outward, the circle grows, the chevron spreads, and the dot gets a thin ring. It is the **Dynamic** checkbox on the Crosshair settings tab, with a pulsing preview so you can see the effect.
+
 **What changed in play:**
 - Your own shots now have spread, so tapping and bursting beat holding the trigger at range.
 - Weapons have different magazines and reloads. Bots reload too, which creates gaps you can use (a switch on each bot turns it off).
 - Falloff matters: the Heavy Repeater is nearly useless past 25 m, the Long Rifle isn't.
+
+---
+
+## 10. Range identity: what "balanced" means here
+
+Each weapon should win fights **inside its own range band**, and lose them outside it. That is the rock-paper-scissors the design asks for:
+
+| Role | Wins | Loses |
+|---|---|---|
+| Short range (Heavy Repeater) | up close (about 0-10 m) | at range, where its damage fades and spread opens |
+| Mid range (Assault Rifle) | the middle (about 6-20 m) | far away, and against a tank up close |
+| Long range (Long Rifle) | far away (about 30 m and out) | up close, where it is helpless |
+
+Time-to-kill pace is kept where it was: a mirror rifle duel at its best range takes about half a second to a second against a steady shooter.
+
+---
+
+## 11. Balance pass 1 (10/18/26)
+
+`tools/balance_sim.py` reads the class and weapon files and simulates duels at several distances. Run it from the project folder:
+
+```
+python3 tools/balance_sim.py
+python3 tools/balance_sim.py --sigma 1.2 --distances 5 10 20 35
+```
+
+**What it found.** The short-range and mid-range identities were right, but the long-range class did not win at long range. The Ghost lost the duel to the Breacher at **25 m (0.58x)** and even at **40 m (0.69x)**, because the rifle's damage only faded to 60% at 50 m, and it fires seven times as often as the sniper, which swamps any aim error.
+
+**What changed.**
+- Assault Rifle falloff: full damage out to **18 m** (was 20), fading to **30%** at **35 m** (was 60% at 50 m). This matches its stated best range of 6-18 m.
+- Long Rifle: preferred minimum range **20 m** (was 14), so Ghost bots keep their distance.
+
+**Result (duel ratio, Breacher against Ghost; above 1 means the Breacher wins):**
+
+| Distance | 5 m | 15 m | 25 m | 30 m | 40 m |
+|---|---|---|---|---|---|
+| Before | 2.31 | 1.73 | 1.73 | 1.98 | 1.17 |
+| After | 2.31 | 1.73 | 1.38 | 0.96 | **0.43** |
+
+Close and mid-range fights are unchanged. The Ghost is now even at 30 m and clearly ahead from about 35 m.
+
+**What it does not tell you.** Targets stand still and the aim is steady, so absolute times are best-case. Use it to compare classes and ranges. Movement, cover, and real aim will lengthen real fights. Projectile weapons are not modeled.
+
+**Left for later.** The Warden is a tank with a short-range gun, and the planned roster separates those jobs, so Warden numbers should be revisited when the tank and short-range classes are built.
 
 ---
 

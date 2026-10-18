@@ -68,6 +68,10 @@ func _process(_delta: float):
 		_ability_dirty = false
 		_refresh_ability_label()
 
+	# The crosshair opens up as far as your shots can currently scatter
+	if is_instance_valid(_player) and _crosshair.visible and _player.weapon.data != null:
+		_crosshair.set_spread(_player.weapon.current_spread(), _player.camera_3d.fov)
+
 func _on_match_timer_updated(time_left: float):
 	if not timer_label: return
 	var minutes = int(time_left) / 60

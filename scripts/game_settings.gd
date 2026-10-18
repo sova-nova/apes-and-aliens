@@ -42,6 +42,7 @@ static var crosshair_gap: float = 4.0         # Empty space around the exact cen
 static var crosshair_opacity: float = 1.0
 static var crosshair_outline: bool = true     # A thin dark outline so it shows on any background
 static var crosshair_dot: bool = false        # An extra dot at the center
+static var crosshair_dynamic: bool = true     # Opens up as the weapon's spread grows
 
 static var _loaded: bool = false
 
@@ -70,6 +71,7 @@ static func load_settings() -> void:
 		crosshair_opacity = clampf(float(cfg.get_value("crosshair", "opacity", 1.0)), 0.2, 1.0)
 		crosshair_outline = bool(cfg.get_value("crosshair", "outline", true))
 		crosshair_dot = bool(cfg.get_value("crosshair", "dot", false))
+		crosshair_dynamic = bool(cfg.get_value("crosshair", "dynamic", true))
 	apply_audio()
 	apply_video()
 
@@ -87,6 +89,7 @@ static func save_settings() -> void:
 	cfg.set_value("crosshair", "opacity", crosshair_opacity)
 	cfg.set_value("crosshair", "outline", crosshair_outline)
 	cfg.set_value("crosshair", "dot", crosshair_dot)
+	cfg.set_value("crosshair", "dynamic", crosshair_dynamic)
 	cfg.save(SAVE_PATH)
 
 static func reset_crosshair() -> void:
@@ -98,6 +101,7 @@ static func reset_crosshair() -> void:
 	crosshair_opacity = 1.0
 	crosshair_outline = true
 	crosshair_dot = false
+	crosshair_dynamic = true
 
 # Where the window was before going fullscreen, so leaving fullscreen can put it back
 static var _windowed_size: Vector2i = Vector2i.ZERO
