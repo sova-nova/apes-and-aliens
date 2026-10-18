@@ -32,6 +32,20 @@ enum DefendRole { ANCHOR, HOLDER, FORWARD }
 ## How often (min, max seconds) holders and forwards move to a fresh post.
 @export var reposition_interval: Vector2 = Vector2(10.0, 20.0)
 
+@export_group("Range")
+## While fighting, a bot closes in or backs off to stay inside its weapon's best range
+## (WeaponData.ideal_range_min and ideal_range_max).
+## How far outside that range a bot can be before it bothers to move. (Stops it jittering back and forth.)
+@export var spacing_tolerance: float = 2.0
+## How far each repositioning step aims, in meters.
+@export var spacing_step: float = 6.0
+## Speed while repositioning mid-fight, as a fraction of normal.
+@export_range(0.1, 1.0) var engaged_speed_scale: float = 0.7
+## A bot never moves further than this from its objective (the point, or its guard post) to fight.
+@export var leash_distance: float = 16.0
+## Close-range bots start charging an enemy this far beyond their shooting range.
+@export var charge_margin: float = 10.0
+
 @export_group("Debug")
 ## Draws each bot's navigation path. Costly with many bots, so leave it off unless diagnosing pathing.
 @export var debug_navigation: bool = false
@@ -350,9 +364,20 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 				_reaction_left -= delta
 				return # Spotted them, still reacting: no shot yet
 
+			# Fight at this weapon's best range: close in, back off, or hold. (We keep shooting either way.)
+			_adjust_spacing(combat_target, dist, delta)
+
 			if weapon.can_fire():
 				_attack(combat_target)
 			return # Skip pathfinding if we are shooting (reloading bots stand and wait)
+
+		# A close-range weapon charges a visible enemy that's just out of its shooting range
+		if weapon.data != null and weapon.data.bots_close_in \
+				and dist > attack_range and dist <= attack_range + charge_margin and _can_see(combat_target):
+			if _adjust_spacing(combat_target, dist, delta):
+				if to_target.length_squared() > 0.01:
+					rotation.y = atan2(-to_target.x, -to_target.z)
+				return # Closing in on the enemy
 
 	# Priority 2: If not fighting, move towards the active Capture Point!
 	if GameManager and GameManager.active_capture_point:
@@ -422,6 +447,63 @@ func _move_and_fight(delta: float, combat_target: Node3D):
 			rotation.y = atan2(-to_point.x, -to_point.z)
 
 ## True if the node is a living, valid target (players, bots, anything with health).
+# ─── Fighting at the right range ────────────────────────────
+
+## Moves to keep fighting inside this weapon's best range. Returns true if it moved.
+func _adjust_spacing(target: Node3D, dist: float, delta: float) -> bool:
+	var data := weapon.data
+	if data == null or data.ideal_range_max <= 0.0:
+		return false # No preferred range: stand where we are
+
+	var flat := target.global_position - global_position
+	flat.y = 0.0
+	if flat.length_squared() < 0.01:
+		return false
+	var toward := flat.normalized()
+
+	var step := Vector3.ZERO
+	if dist > data.ideal_range_max + spacing_tolerance:
+		step = toward * minf(dist - data.ideal_range_max, spacing_step) # Too far: step toward them
+	elif data.ideal_range_min > 0.0 and dist < data.ideal_range_min - spacing_tolerance:
+		step = -toward * spacing_step # Too close: back away
+	else:
+		return false # In the sweet spot
+
+	var destination := NavigationServer3D.map_get_closest_point(nav_agent.get_navigation_map(), global_position + step)
+	if destination.distance_to(global_position) < 0.75:
+		return false # Boxed in (a wall behind us, say): hold and shoot instead of thrashing
+	if not _within_leash(destination):
+		return false # Not worth leaving the objective for
+	_nav_step(destination, delta, engaged_speed_scale)
+	return true
+
+## Whether a spot is close enough to our objective (the point, or our guard post) to fight from.
+func _within_leash(spot: Vector3) -> bool:
+	var anchor := global_position
+	if is_instance_valid(_target_point_ref):
+		anchor = _guard_post if (faction == GameManager.defending_team and _defender_at_post) else _current_point_target
+	return Vector2(spot.x - anchor.x, spot.z - anchor.z).length() <= leash_distance
+
+## Walk toward a spot along the navmesh WITHOUT turning to face the way we're going,
+## so a bot that is backing away or closing in keeps its eyes on the enemy.
+func _nav_step(destination: Vector3, delta: float, speed_scale: float) -> void:
+	_repath_timer -= delta
+	if _repath_timer <= 0.0 or nav_agent.target_position.distance_to(destination) > 1.0:
+		_repath_timer = 1.0
+		nav_agent.target_position = destination
+
+	if nav_agent.is_navigation_finished():
+		velocity.x = move_toward(velocity.x, 0.0, move_speed)
+		velocity.z = move_toward(velocity.z, 0.0, move_speed)
+		return
+
+	var direction := nav_agent.get_next_path_position() - global_position
+	direction.y = 0.0
+	if direction.length() > 0.05:
+		direction = direction.normalized()
+		velocity.x = direction.x * move_speed * _speed_multiplier * speed_scale
+		velocity.z = direction.z * move_speed * _speed_multiplier * speed_scale
+
 # ─── Defender AI ────────────────────────────────────────────
 
 func _assign_defend_role():

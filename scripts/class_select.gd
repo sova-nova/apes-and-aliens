@@ -131,6 +131,8 @@ func _update_info_panel():
 	_info_title.text = "%s  —  %s" % [CLASS_TITLES[_chosen_class].to_upper(), CLASS_TAGLINES[_chosen_class]]
 	var w := c.get_weapon()
 	_info_stats.text = "HP %d   ·   Speed %.1f   ·   Weapon: %s" % [int(c.max_health), c.move_speed, w.weapon_name]
+	if w.range_text() != "":
+		_info_stats.text += "   ·   Best at %s" % w.range_text()
 	_info_weapon.text = "%s   ·   Mag %d   ·   Reload %s" % [w.damage_text(), w.magazine_size, w.reload_text()]
 
 	var types := [c.ability_1_type, c.ability_2_type, c.ability_3_type]

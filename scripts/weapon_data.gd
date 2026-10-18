@@ -59,6 +59,13 @@ enum ReloadStyle {
 @export_group("Bots")
 ## How far away a bot starts shooting with this weapon (meters).
 @export var engage_range: float = 15.0
+## The distances (meters) where this weapon does its best. In a fight, a bot backs away if the enemy is
+## closer than the minimum, and closes in if the enemy is farther than the maximum.
+## A maximum of 0 means no preference: the bot just stands where it is.
+@export var ideal_range_min: float = 0.0
+@export var ideal_range_max: float = 0.0
+## Short-range weapons: a bot charges a visible enemy that is just out of its shooting range.
+@export var bots_close_in: bool = false
 
 @export_group("Projectile")
 ## Meters per second.
@@ -104,6 +111,14 @@ func damage_text() -> String:
 	if pellets > 1:
 		per_shot = "%d×%d" % [int(damage), pellets]
 	return "%s dmg × %.1f/s  (%d DPS)" % [per_shot, 1.0 / maxf(fire_interval, 0.001), int(dps())]
+
+## "6–18 m", "up to 10 m", or nothing if the weapon has no preferred range.
+func range_text() -> String:
+	if ideal_range_max <= 0.0:
+		return ""
+	if ideal_range_min <= 0.5:
+		return "up to %d m" % int(ideal_range_max)
+	return "%d–%d m" % [int(ideal_range_min), int(ideal_range_max)]
 
 func reload_text() -> String:
 	if reload_style == ReloadStyle.INCREMENTAL:

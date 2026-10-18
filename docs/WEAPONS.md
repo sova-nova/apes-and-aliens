@@ -3,7 +3,7 @@
 The weapon system for Apes vs Aliens: what's decided, how it will be built, and what's still open.
 Companion to `GAME_DESIGN.md`. Status words are the same: **Decided**, **Leaning**, **Open**.
 
-*Last updated: 10/18/26. Weapon system v1 is built (see section 9).*
+*Last updated: 10/18/26. Weapon system v1 and range-aware bots are built (see section 9).*
 
 ---
 
@@ -137,10 +137,23 @@ Counterpart classes share the same *job* and range band, but differ in how they 
 2. **Done:** the three existing classes use weapon data, with spread and falloff, and each has a different magazine and reload.
 3. **Done:** the projectile behavior (`Projectile`), with splash, knockback, self-damage, pooling, and bots that lead their targets.
 4. **Done, for testing:** two extra weapons you can assign to any class: a *Scatter Gun* (shotgun pellets, round-by-round reload) and a *Rocket Launcher* (projectile with splash).
-5. **Next: make bots range-aware.** Bots now start shooting at their weapon's own range, but they don't yet *move* to fight at it.
+5. **Done: range-aware bots.** Each weapon declares a best-range band, and bots fight inside it (see "Bots and range" below).
 6. **Next: dynamic crosshair** that shows bloom (optional).
 7. **Next: balance pass,** time-to-kill across range bands.
 8. **Later: healing weapons, per-weapon sounds and effects, and more reload styles.**
+
+**Bots and range.** A bot with a weapon that has a best-range band behaves like this while fighting:
+
+- **Enemy farther than the band's maximum:** it steps toward them until it's in range.
+- **Enemy closer than the band's minimum:** it backs away (mostly the long-range class).
+- **Inside the band:** it holds its ground and shoots.
+- **Close-range weapons charge:** a bot whose weapon is marked "closes in" also charges a visible enemy that's just out of shooting range (10 m past it by default).
+- **A leash keeps bots on the objective.** A bot never repositions more than 16 m from its capture point or guard post, so a fight can't pull it away from its job.
+- **A small tolerance** (2 m) outside the band is allowed before it moves, so bots don't jitter back and forth. A bot boxed in by a wall just holds and shoots.
+
+All of it is in the bot's "Range" settings, and each weapon file has its own band (`ideal_range_min`, `ideal_range_max`, `bots_close_in`). A weapon with no band set makes bots stand where they are, as before.
+
+Not yet: bots using cover, strafing, or choosing *which* fights to take. Those are later behavior work.
 
 **What changed in play:**
 - Your own shots now have spread, so tapping and bursting beat holding the trigger at range.

@@ -1,11 +1,10 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3 uid="uid://bitdt0o13jueb"]
 
-[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+[ext_resource type="Script" uid="uid://cknxalc2fuyqa" path="res://scripts/weapon_data.gd" id="1_weapon"]
 
 [resource]
 script = ExtResource("1_weapon")
 weapon_name = "Scatter Gun"
-behavior = 0
 damage = 9.0
 fire_interval = 0.75
 pellets = 8
@@ -14,23 +13,10 @@ magazine_size = 6
 reload_style = 1
 reload_time = 0.5
 spread_base = 4.0
-spread_bloom_per_shot = 0.0
-spread_bloom_max = 0.0
-spread_recovery = 3.0
-first_shot_accurate = false
-accuracy_reset_time = 0.3
 falloff_start = 6.0
 falloff_end = 18.0
 falloff_min = 0.25
-falloff_shape = 1.0
 engage_range = 12.0
-projectile_speed = 30.0
-projectile_gravity = 0.0
-projectile_lifetime = 3.0
-projectile_size = 0.25
-splash_radius = 0.0
-splash_min_multiplier = 0.3
-knockback_force = 0.0
-self_damage_multiplier = 0.0
-self_knockback_multiplier = 1.0
+ideal_range_max = 8.0
+bots_close_in = true
 tracer_color = Color(1, 0.7, 0.2, 1)
